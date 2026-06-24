@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <title>FaiAudit — Dashboard Audit Sales</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>FaiAudit</h1>
+    <div class="toolbar">
+      <input id="ownerId" placeholder="Owner ID" />
+      <button id="refresh">Muat Ulang</button>
+      <button id="addStaff">+ Tambah Sales</button>
+    </div>
+  </header>
+
+  <main>
+    <table id="sheet">
+      <thead>
+        <tr>
+          <th>Sales</th>
+          <th>Lead</th>
+          <th>Status WA</th>
+          <th>Stage Sebelumnya</th>
+          <th>Funnel Stage</th>
+          <th>Skor</th>
+          <th>Catatan Analisis</th>
+          <th>Evaluasi</th>
+          <th>Dianalisis</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="sheetBody"></tbody>
+    </table>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
