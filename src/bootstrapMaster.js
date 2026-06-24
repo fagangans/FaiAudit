@@ -1,10 +1,5 @@
 import { supabase } from "./supabase.js";
 
-function isMasterEmail(email) {
-  const masterEmail = (process.env.MASTER_EMAIL || "").trim().toLowerCase();
-  return masterEmail && typeof email === "string" && email.trim().toLowerCase() === masterEmail;
-}
-
 // Memastikan akun master (env MASTER_EMAIL/MASTER_PASSWORD) selalu ada di Supabase Auth
 // dan punya baris owners sendiri, supaya master juga bisa diaudit bisnisnya sendiri.
 export async function bootstrapMasterAccount() {
@@ -51,5 +46,3 @@ export async function bootstrapMasterAccount() {
 
   console.log(`[FaiAudit] Akun master siap: ${email}`);
 }
-
-export { isMasterEmail };
