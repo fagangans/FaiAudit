@@ -2,36 +2,19 @@ import express from "express";
 import { supabase } from "../supabase.js";
 import { startStaffSession, stopStaffSession } from "../whatsapp/connector.js";
 import { analyzeLead } from "../ai/analyze.js";
+import { requireOwner } from "../middleware/requireOwner.js";
 
 export const router = express.Router();
 
 const WA_NUMBER_RE = /^[1-9][0-9]{7,14}$/; // format internasional tanpa "+", mis. 62xxxxxxxxxx
 
-// Memverifikasi JWT Supabase asli dari header Authorization, lalu memetakan
-// user yang login ke baris owners miliknya. Tidak pernah percaya owner_id
-// yang dikirim langsung oleh client.
-async function requireOwner(req, res, next) {
-  const authHeader = req.header("authorization") || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) return res.status(401).json({ error: "Authorization Bearer token wajib diisi" });
-
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userData?.user) {
-    return res.status(401).json({ error: "Token tidak valid atau sudah kedaluwarsa" });
-  }
-
-  const { data: owner, error: ownerError } = await supabase
-    .from("owners")
-    .select("id")
-    .eq("user_id", userData.user.id)
-    .single();
-  if (ownerError || !owner) {
-    return res.status(403).json({ error: "Akun ini belum terdaftar sebagai owner" });
-  }
-
-  req.ownerId = owner.id;
-  next();
-}
+router.get("/me", requireOwner, (req, res) => {
+  res.json({
+    name: req.owner.name,
+    business_name: req.owner.business_name,
+    is_master: req.owner.is_master,
+  });
+});
 
 router.post("/staff", requireOwner, async (req, res) => {
   const { name, wa_number } = req.body || {};

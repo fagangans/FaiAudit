@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { router as apiRouter } from "./routes/api.js";
 import { router as authRouter } from "./routes/auth.js";
+import { router as adminRouter } from "./routes/admin.js";
+import { bootstrapMasterAccount } from "./bootstrapMaster.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,9 +25,13 @@ const authLimiter = rateLimit({
 });
 
 app.use("/api/auth", authLimiter, authRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api", apiRouter);
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`[FaiAudit] dashboard berjalan di http://localhost:${port}`);
+
+bootstrapMasterAccount().finally(() => {
+  app.listen(port, () => {
+    console.log(`[FaiAudit] dashboard berjalan di http://localhost:${port}`);
+  });
 });

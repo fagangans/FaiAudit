@@ -31,6 +31,7 @@ Isi nilai berikut:
 - `SUPABASE_URL` — URL project Supabase FaiAudit (`https://xovcyjpxynewruixpdbp.supabase.co`)
 - `SUPABASE_SERVICE_ROLE_KEY` — ambil dari Supabase Dashboard project FaiAudit → Project Settings → API → `service_role` key. **Jangan pernah commit nilai ini ke git.**
 - `SUPABASE_ANON_KEY` — anon/publishable key dari halaman yang sama
+- `MASTER_EMAIL` / `MASTER_PASSWORD` — kredensial satu-satunya akun master (kamu). Ganti password default.
 - `OPENROUTER_API_KEY` — API key OpenRouter kamu (untuk provider `qwen`)
 - `AI_PROVIDER` — `qwen` (pakai OpenRouter) atau `scraper` (fallback gratis, tidak stabil)
 - `QWEN_MODEL` — default `qwen/qwen-2.5-72b-instruct`, bisa diganti model OpenRouter lain
@@ -75,17 +76,13 @@ Buat config Nginx mengarah ke `localhost:3000`, lalu:
 sudo certbot --nginx -d domain-kamu.com
 ```
 
-## 6. Buat akun owner pertama
+## 6. Login sebagai master & daftarkan client
 
-FaiAudit memakai Supabase Auth asli (bukan login default). Daftar lewat dashboard (form Register di halaman utama), atau langsung lewat API:
-
-```bash
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"you@example.com","password":"passwordkuat123","name":"Nama Kamu"}'
-```
-
-Simpan `access_token` dari respons — dashboard web akan menyimpannya otomatis di browser setelah login lewat form.
+Tidak ada pendaftaran publik. Akun master dibuat otomatis saat server pertama kali start
+dari `MASTER_EMAIL`/`MASTER_PASSWORD` di `.env` — login langsung di dashboard dengan
+kredensial itu. Setelah login, buka menu **Pengaturan** untuk mendaftarkan client
+(penyewa) — sistem membuat akun + password sementara yang ditampilkan sekali untuk
+disampaikan ke client tersebut.
 
 ## 7. Tambah sales/staff & pairing WhatsApp
 
