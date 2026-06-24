@@ -12,13 +12,9 @@ export async function bootstrapMasterAccount() {
     return;
   }
 
-  const { data: existingOwner } = await supabase
-    .from("owners")
-    .select("id, user_id")
-    .eq("is_master", true)
-    .maybeSingle();
-  if (existingOwner) return;
-
+  // 1. Pastikan user master ada di Supabase Auth. createUser idempoten:
+  //    kalau sudah ada, abaikan error "already registered" dan cari id-nya.
+  let userId;
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -28,19 +24,45 @@ export async function bootstrapMasterAccount() {
     console.error(`[FaiAudit] Gagal membuat akun master: ${createError.message}`);
     return;
   }
-
-  let userId = created?.user?.id;
+  userId = created?.user?.id;
   if (!userId) {
     const { data: list } = await supabase.auth.admin.listUsers();
     userId = list?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())?.id;
   }
-  if (!userId) return;
+  if (!userId) {
+    console.error("[FaiAudit] Tidak bisa menemukan user master di Supabase Auth.");
+    return;
+  }
 
-  const { error: ownerError } = await supabase
+  // 2. Pastikan baris owners untuk user master ada dan ditandai is_master.
+  //    Pakai check-then-insert (bukan onConflict) supaya tidak bergantung pada
+  //    nama constraint tertentu.
+  const { data: existing } = await supabase
     .from("owners")
-    .upsert({ user_id: userId, name: "Master", is_master: true }, { onConflict: "user_id" });
-  if (ownerError) {
-    console.error(`[FaiAudit] Gagal membuat baris owner master: ${ownerError.message}`);
+    .select("id, is_master")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing) {
+    if (!existing.is_master) {
+      const { error: updErr } = await supabase
+        .from("owners")
+        .update({ is_master: true })
+        .eq("id", existing.id);
+      if (updErr) {
+        console.error(`[FaiAudit] Gagal menandai owner master: ${updErr.message}`);
+        return;
+      }
+    }
+    console.log(`[FaiAudit] Akun master siap: ${email}`);
+    return;
+  }
+
+  const { error: insertErr } = await supabase
+    .from("owners")
+    .insert({ user_id: userId, name: "Master", is_master: true });
+  if (insertErr) {
+    console.error(`[FaiAudit] Gagal membuat baris owner master: ${insertErr.message}`);
     return;
   }
 
