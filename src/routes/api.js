@@ -5,36 +5,46 @@ import { analyzeLead } from "../ai/analyze.js";
 
 export const router = express.Router();
 
-// NOTE (MVP): owner diidentifikasi lewat header X-Owner-Id apa adanya.
-// Sebelum dipakai produksi multi-tenant sungguhan, ganti dengan Supabase Auth
-// (verifikasi JWT) supaya satu owner tidak bisa membaca data owner lain.
-function requireOwner(req, res, next) {
-  const ownerId = req.header("x-owner-id");
-  if (!ownerId) return res.status(401).json({ error: "Header x-owner-id wajib diisi" });
-  req.ownerId = ownerId;
+const WA_NUMBER_RE = /^[1-9][0-9]{7,14}$/; // format internasional tanpa "+", mis. 62xxxxxxxxxx
+
+// Memverifikasi JWT Supabase asli dari header Authorization, lalu memetakan
+// user yang login ke baris owners miliknya. Tidak pernah percaya owner_id
+// yang dikirim langsung oleh client.
+async function requireOwner(req, res, next) {
+  const authHeader = req.header("authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Authorization Bearer token wajib diisi" });
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    return res.status(401).json({ error: "Token tidak valid atau sudah kedaluwarsa" });
+  }
+
+  const { data: owner, error: ownerError } = await supabase
+    .from("owners")
+    .select("id")
+    .eq("user_id", userData.user.id)
+    .single();
+  if (ownerError || !owner) {
+    return res.status(403).json({ error: "Akun ini belum terdaftar sebagai owner" });
+  }
+
+  req.ownerId = owner.id;
   next();
 }
 
-router.post("/owners", async (req, res) => {
-  const { name, business_name } = req.body;
-  const { data, error } = await supabase
-    .from("owners")
-    .insert({ name, business_name })
-    .select()
-    .single();
-  if (error) return res.status(400).json({ error: error.message });
-  res.json(data);
-});
-
 router.post("/staff", requireOwner, async (req, res) => {
-  const { name, wa_number } = req.body;
-  if (!name || !wa_number) {
-    return res.status(400).json({ error: "name dan wa_number wajib diisi" });
+  const { name, wa_number } = req.body || {};
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ error: "name wajib diisi" });
+  }
+  if (!WA_NUMBER_RE.test(wa_number || "")) {
+    return res.status(400).json({ error: "wa_number harus format internasional tanpa '+', contoh 62812xxxxxxx" });
   }
 
   const { data: staff, error } = await supabase
     .from("staff")
-    .insert({ owner_id: req.ownerId, name, wa_number, wa_session_status: "pairing" })
+    .insert({ owner_id: req.ownerId, name: name.trim(), wa_number, wa_session_status: "pairing" })
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
@@ -56,12 +66,16 @@ router.post("/staff", requireOwner, async (req, res) => {
 });
 
 router.delete("/staff/:id", requireOwner, async (req, res) => {
-  stopStaffSession(req.params.id);
-  const { error } = await supabase
+  const { data: staff, error: findError } = await supabase
     .from("staff")
-    .delete()
+    .select("id")
     .eq("id", req.params.id)
-    .eq("owner_id", req.ownerId);
+    .eq("owner_id", req.ownerId)
+    .single();
+  if (findError || !staff) return res.status(404).json({ error: "Staff tidak ditemukan" });
+
+  stopStaffSession(staff.id);
+  const { error } = await supabase.from("staff").delete().eq("id", staff.id);
   if (error) return res.status(400).json({ error: error.message });
   res.json({ ok: true });
 });
@@ -97,8 +111,16 @@ router.get("/dashboard", requireOwner, async (req, res) => {
 });
 
 router.post("/leads/:id/analyze", requireOwner, async (req, res) => {
+  const { data: lead, error: findError } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .single();
+  if (findError || !lead) return res.status(404).json({ error: "Lead tidak ditemukan" });
+
   try {
-    const result = await analyzeLead(req.params.id);
+    const result = await analyzeLead(lead.id);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -6,34 +6,50 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
+  <section id="authView" class="auth-card">
     <h1>FaiAudit</h1>
-    <div class="toolbar">
-      <input id="ownerId" placeholder="Owner ID" />
-      <button id="refresh">Muat Ulang</button>
-      <button id="addStaff">+ Tambah Sales</button>
-    </div>
-  </header>
+    <form id="authForm">
+      <input id="authName" placeholder="Nama owner (untuk daftar)" />
+      <input id="authEmail" type="email" placeholder="Email" required />
+      <input id="authPassword" type="password" placeholder="Password (min 8 karakter)" required />
+      <div class="auth-actions">
+        <button type="submit" data-mode="login">Masuk</button>
+        <button type="submit" data-mode="register">Daftar</button>
+      </div>
+      <p id="authError" class="error"></p>
+    </form>
+  </section>
 
-  <main>
-    <table id="sheet">
-      <thead>
-        <tr>
-          <th>Sales</th>
-          <th>Lead</th>
-          <th>Status WA</th>
-          <th>Stage Sebelumnya</th>
-          <th>Funnel Stage</th>
-          <th>Skor</th>
-          <th>Catatan Analisis</th>
-          <th>Evaluasi</th>
-          <th>Dianalisis</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="sheetBody"></tbody>
-    </table>
-  </main>
+  <div id="appView" hidden>
+    <header>
+      <h1>FaiAudit</h1>
+      <div class="toolbar">
+        <button id="refresh">Muat Ulang</button>
+        <button id="addStaff">+ Tambah Sales</button>
+        <button id="logout">Keluar</button>
+      </div>
+    </header>
+
+    <main>
+      <table id="sheet">
+        <thead>
+          <tr>
+            <th>Sales</th>
+            <th>Lead</th>
+            <th>Status WA</th>
+            <th>Stage Sebelumnya</th>
+            <th>Funnel Stage</th>
+            <th>Skor</th>
+            <th>Catatan Analisis</th>
+            <th>Evaluasi</th>
+            <th>Dianalisis</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="sheetBody"></tbody>
+      </table>
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>

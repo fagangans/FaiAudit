@@ -16,3 +16,11 @@ tr:nth-child(even) { background: #fafbfc; }
 .stage-negotiation { background: #8b5cf6; }
 .stage-closed_won { background: #16a34a; }
 .stage-closed_lost { background: #dc2626; }
+
+.auth-card { max-width: 360px; margin: 80px auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+.auth-card h1 { margin-top: 0; }
+.auth-card input { width: 100%; padding: 8px 10px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.auth-actions { display: flex; gap: 8px; }
+.auth-actions button { flex: 1; padding: 8px; border: none; border-radius: 4px; background: #3b82f6; color: #fff; cursor: pointer; }
+.auth-actions button[data-mode="register"] { background: #64748b; }
+.error { color: #dc2626; font-size: 13px; min-height: 16px; }

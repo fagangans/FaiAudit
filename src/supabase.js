@@ -7,8 +7,19 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   );
 }
 
+// Service-role client: dipakai server untuk operasi tepercaya (ingest chat dari
+// Baileys, tulis hasil analisis AI). Tidak pernah dipakai langsung untuk
+// melayani request HTTP tanpa melalui middleware requireOwner.
 export const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } },
+);
+
+// Anon-key client: dipakai khusus untuk alur auth (signUp/signInWithPassword)
+// supaya password user tidak pernah melalui jalur service-role.
+export const supabaseAuth = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
   { auth: { persistSession: false } },
 );
