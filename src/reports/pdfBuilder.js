@@ -190,15 +190,59 @@ export function buildLeadPdfBuffer(lead) {
   return collectToBuffer(doc);
 }
 
-// --- Laporan harian lengkap untuk owner: snapshot + diagram + transkrip chat ---
+export function safeFileName(name) {
+  return (name || "lead").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "lead";
+}
+
+// File transkrip chat khusus 1 lead — dipisah dari laporan harian utama
+// karena kalau seluruh chat semua lead digabung jadi 1 PDF, file itu bisa
+// jadi sangat panjang/berat (puluhan-ratusan halaman untuk lead aktif).
+// Laporan utama hanya menaruh ringkasan + pointer ke file ini.
+export function buildLeadChatPdfBuffer(lead, periodLabelLower) {
+  const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
+  const messages = lead.exampleMessages || [];
+
+  drawHeader(
+    doc,
+    `Transkrip Chat — ${lead.lead_name}`,
+    `${periodLabelLower || "periode ini"} · ${messages.length} pesan · Sales: ${lead.staff_name || "-"}`,
+  );
+
+  if (!messages.length) {
+    doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Belum ada chat tercatat di periode ini.");
+  } else {
+    for (const m of messages) {
+      const who = m.direction === "outbound" ? "Sales" : "Lead";
+      doc
+        .fontSize(9)
+        .font("Helvetica-Bold")
+        .fillColor(m.direction === "outbound" ? "#15315f" : "#7a1f1f")
+        .text(`${who} · ${fmtDateTime(m.sent_at)}`);
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor("#1a1a1a")
+        .text(m.body || "", { indent: 10 });
+      doc.moveDown(0.3);
+    }
+  }
+
+  return collectToBuffer(doc);
+}
+
+// --- Laporan harian lengkap untuk owner: snapshot + diagram + ringkasan lead ---
+// Transkrip chat penuh TIDAK dicetak di sini (lihat buildLeadChatPdfBuffer)
+// — kalau ada banyak lead aktif, laporan ini akan tetap ringkas & cepat
+// dibaca, sementara percakapan lengkap per lead ada di file terpisah.
 export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel, summary, leads }) {
   const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
   const period = periodLabel || "Periode";
+  const periodLower = period.toLowerCase();
 
   drawHeader(doc, `Laporan Harian — ${period} (${dateLabel})`, businessName ? `Untuk: ${businessName}` : undefined);
 
   sectionTitle(doc, "Ringkasan");
-  labelValue(doc, `Lead dengan aktivitas chat ${period.toLowerCase()}`, String(summary.activeLeadCount));
+  labelValue(doc, `Lead dengan aktivitas chat ${periodLower}`, String(summary.activeLeadCount));
   labelValue(doc, "Total lead berisiko tinggi (saat ini)", String(summary.highRiskCount));
 
   const riskCounts = { tinggi: 0, sedang: 0, rendah: 0, selesai: 0 };
@@ -213,7 +257,7 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
     Object.keys(summary.stageCounts).map((stage) => ({ label: stageLabel(stage), value: summary.stageCounts[stage] })),
   );
 
-  sectionTitle(doc, `Diagram Distribusi Risiko (lead aktif ${period.toLowerCase()})`);
+  sectionTitle(doc, `Diagram Distribusi Risiko (lead aktif ${periodLower})`);
   horizontalBarChart(
     doc,
     Object.keys(riskCounts).map((level) => ({ label: RISK_LABEL[level], value: riskCounts[level] })),
@@ -221,8 +265,13 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
 
   sectionTitle(doc, `Detail Lead Aktif ${period} (${leads.length})`);
   if (!leads.length) {
-    doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text(`Tidak ada chat masuk ${period.toLowerCase()}.`);
+    doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text(`Tidak ada chat masuk ${periodLower}.`);
   } else {
+    doc
+      .fontSize(9)
+      .font("Helvetica-Oblique")
+      .fillColor("#5b6b85")
+      .text(`Transkrip chat ${periodLower} setiap lead ada di file PDF terpisah dalam folder "chat/" pada arsip ZIP ini.`);
     for (const lead of leads) {
       doc.moveDown(0.4);
       doc.fontSize(11).font("Helvetica-Bold").fillColor("#15315f").text(lead.lead_name);
@@ -230,28 +279,12 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
       labelValue(doc, "Funnel Stage", stageLabel(lead.funnel_stage));
       labelValue(doc, "Skor", lead.score != null ? String(lead.score) : "-");
       labelValue(doc, "Risiko", RISK_LABEL[lead.risk?.level] || "-");
-      if (lead.exampleMessages?.length) {
-        doc
-          .fontSize(9)
-          .font("Helvetica-Bold")
-          .fillColor("#0f2547")
-          .text(`Transkrip chat ${period.toLowerCase()} (${lead.exampleMessages.length} pesan):`);
-        for (const m of lead.exampleMessages) {
-          const who = m.direction === "outbound" ? "Sales" : "Lead";
-          doc
-            .fontSize(9)
-            .font("Helvetica-Bold")
-            .fillColor(m.direction === "outbound" ? "#15315f" : "#7a1f1f")
-            .text(`${who} · ${fmtDateTime(m.sent_at)}`, { indent: 10 });
-          doc
-            .fontSize(9)
-            .font("Helvetica")
-            .fillColor("#1a1a1a")
-            .text(m.body || "", { indent: 16 });
-        }
-      } else {
-        doc.fontSize(9).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Belum ada chat tercatat di periode ini.");
-      }
+      labelValue(doc, `Jumlah chat ${periodLower}`, String(lead.exampleMessages?.length || 0));
+      doc
+        .fontSize(9)
+        .font("Helvetica-Bold")
+        .fillColor("#0f2547")
+        .text(`Transkrip lengkap: chat/${safeFileName(lead.lead_name)}.pdf`);
       doc
         .strokeColor("#dfe4ee")
         .lineWidth(0.5)

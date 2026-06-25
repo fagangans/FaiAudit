@@ -4,8 +4,9 @@ import { supabase, supabaseAuth } from "../supabase.js";
 import { startStaffSession, stopStaffSession, getPairingState } from "../whatsapp/connector.js";
 import { analyzeLead, computeLeadRisk, FUNNEL_STAGES } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
-import { buildLeadPdfBuffer, buildDailyReportPdfBuffer } from "../reports/pdfBuilder.js";
+import { buildLeadPdfBuffer } from "../reports/pdfBuilder.js";
 import { buildDailyReportData, todayRangeWIB } from "../reports/dailyReportData.js";
+import { buildDailyReportZipBuffer } from "../reports/dailyReportArchive.js";
 
 export const router = express.Router();
 
@@ -327,18 +328,19 @@ router.get("/leads/:id/pdf", requireOwner, async (req, res) => {
   }
 });
 
-// Download manual laporan HARI INI dari dashboard (snapshot funnel/risiko +
-// lead yang ada chat hari ini, lengkap seluruh isi chat + diagram). Laporan
-// HARI KEMARIN dikirim otomatis oleh scheduler ke WA pribadi owner — bukan
-// lewat endpoint ini — supaya tidak rancu dengan apa yang dilihat di
-// dashboard saat ini juga.
+// Download manual laporan HARI INI dari dashboard: 1 ZIP berisi PDF
+// ringkasan (snapshot funnel/risiko + diagram) + 1 PDF transkrip chat
+// terpisah per lead di folder chat/ — dipisah per lead supaya tidak jadi
+// satu PDF raksasa kalau lead aktifnya banyak. Laporan HARI KEMARIN dikirim
+// otomatis oleh scheduler ke WA pribadi owner — bukan lewat endpoint ini —
+// supaya tidak rancu dengan apa yang dilihat di dashboard saat ini juga.
 router.get("/reports/daily/pdf", requireOwner, async (req, res) => {
   try {
     const range = todayRangeWIB();
     const data = await buildDailyReportData(req.ownerId, req.owner.business_name, range);
-    const buffer = await buildDailyReportPdfBuffer(data);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-HariIni-${data.dateLabel}.pdf"`);
+    const buffer = await buildDailyReportZipBuffer(data);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-HariIni-${data.dateLabel}.zip"`);
     res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: "Gagal membuat laporan harian: " + err.message });

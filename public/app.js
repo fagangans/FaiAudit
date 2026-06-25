@@ -374,7 +374,17 @@ function renderDashboardRows(rows) {
           method: "POST",
         });
         const data = await res.json();
-        if (!res.ok) alert(data.error || "Gagal analisis");
+        if (!res.ok) {
+          alert(data.error || "Gagal analisis");
+          return;
+        }
+        // analyzeLead() sengaja skip panggilan AI kalau tidak ada chat baru
+        // sejak analisis terakhir (hemat biaya token) — tanpa pesan ini,
+        // klik tombol kelihatan "tidak terjadi apa-apa" padahal itu memang
+        // perilaku yang diharapkan, bukan bug.
+        if (data.skipped) {
+          alert("Belum ada chat baru sejak analisis terakhir, jadi AI tidak dijalankan ulang (hemat biaya). Data di tabel sudah hasil analisis terakhir.");
+        }
       } finally {
         await loadDashboard();
       }

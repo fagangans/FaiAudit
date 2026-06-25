@@ -324,9 +324,9 @@ export async function sendOwnerNotification(ownerId, notifyWaNumber, text) {
 }
 
 // Sama seperti sendOwnerNotification tapi untuk lampiran dokumen (laporan
-// harian PDF) — tetap hanya ke nomor pribadi owner, lewat sesi yang sudah
-// terhubung, tidak pernah membuka sesi baru.
-export async function sendOwnerDocument(ownerId, notifyWaNumber, buffer, fileName, caption) {
+// harian, PDF atau ZIP) — tetap hanya ke nomor pribadi owner, lewat sesi
+// yang sudah terhubung, tidak pernah membuka sesi baru.
+export async function sendOwnerDocument(ownerId, notifyWaNumber, buffer, fileName, caption, mimetype = "application/pdf") {
   if (!notifyWaNumber) return false;
   const found = await findConnectedOwnerSock(ownerId);
   if (!found) return false;
@@ -335,12 +335,12 @@ export async function sendOwnerDocument(ownerId, notifyWaNumber, buffer, fileNam
     await found.sock.sendMessage(jid, {
       document: buffer,
       fileName,
-      mimetype: "application/pdf",
+      mimetype,
       caption,
     });
     return true;
   } catch (err) {
-    logger.error({ ownerId, staffId: found.staffId, err: err.message }, "gagal mengirim laporan PDF WA ke owner");
+    logger.error({ ownerId, staffId: found.staffId, err: err.message }, "gagal mengirim laporan WA ke owner");
     return false;
   }
 }
