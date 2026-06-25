@@ -190,6 +190,13 @@ tr:hover td { background: var(--surface-alt); }
   padding: 20px;
   z-index: 100;
 }
+/* Tanpa rule ini, "display: flex" di atas punya spesifisitas sama dengan
+   default UA stylesheet "[hidden]{display:none}" tapi dimuat lebih akhir,
+   sehingga selalu menang — modal jadi selalu tampil (kotak putih kosong)
+   sejak halaman dibuka dan atribut hidden lewat JS tidak berefek sama sekali. */
+.modal-overlay[hidden] {
+  display: none;
+}
 .modal {
   position: relative;
   background: var(--surface);
