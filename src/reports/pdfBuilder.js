@@ -66,6 +66,18 @@ function labelValue(doc, label, value) {
     .text(value ?? "-");
 }
 
+// PDF tidak bisa "menembus" isi ZIP secara umum — satu-satunya cara link di
+// satu PDF bisa membuka file PDF lain adalah action "Launch" dengan path
+// relatif (didukung luas oleh Adobe Acrobat/Reader; browser/viewer lain bisa
+// mengabaikannya karena alasan keamanan, itu keterbatasan format PDF, bukan
+// bug kita). Path relatif tetap valid SELAMA struktur folder ZIP (PDF utama
+// + folder chat/) tidak diubah saat diekstrak.
+function relativeFileLink(doc, x, y, w, h, relativePath) {
+  const action = doc.ref({ S: "Launch", F: new String(relativePath), NewWindow: true });
+  action.end();
+  doc.annotate(x, y, w, h, { Subtype: "Link", A: action, Border: [0, 0, 0] });
+}
+
 function bulletList(doc, items) {
   if (!items?.length) {
     doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Tidak ada.");
@@ -271,7 +283,7 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
       .fontSize(9)
       .font("Helvetica-Oblique")
       .fillColor("#5b6b85")
-      .text(`Transkrip chat ${periodLower} setiap lead ada di file PDF terpisah dalam folder "chat/" pada arsip ZIP ini.`);
+      .text(`Transkrip chat ${periodLower} setiap lead ada di file PDF terpisah dalam folder "chat/" pada arsip ZIP ini. Klik link biru di bawah untuk membukanya langsung (perlu ekstrak ZIP dulu & buka pakai Adobe Acrobat/Reader; sebagian PDF viewer lain membatasi fitur ini demi keamanan).`);
     for (const lead of leads) {
       doc.moveDown(0.4);
       doc.fontSize(11).font("Helvetica-Bold").fillColor("#15315f").text(lead.lead_name);
@@ -280,11 +292,17 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
       labelValue(doc, "Skor", lead.score != null ? String(lead.score) : "-");
       labelValue(doc, "Risiko", RISK_LABEL[lead.risk?.level] || "-");
       labelValue(doc, `Jumlah chat ${periodLower}`, String(lead.exampleMessages?.length || 0));
+      const chatRelativePath = `chat/${safeFileName(lead.lead_name)}.pdf`;
+      const linkLabel = `Transkrip lengkap: ${chatRelativePath}`;
+      const linkX = doc.x;
+      const linkY = doc.y;
       doc
         .fontSize(9)
         .font("Helvetica-Bold")
-        .fillColor("#0f2547")
-        .text(`Transkrip lengkap: chat/${safeFileName(lead.lead_name)}.pdf`);
+        .fillColor("#1d5fd6")
+        .text(linkLabel, { underline: true });
+      const linkWidth = Math.min(doc.widthOfString(linkLabel), doc.page.width - doc.page.margins.right - linkX);
+      relativeFileLink(doc, linkX, linkY, linkWidth, doc.currentLineHeight(), chatRelativePath);
       doc
         .strokeColor("#dfe4ee")
         .lineWidth(0.5)
