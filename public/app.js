@@ -29,6 +29,7 @@ function setToken(token, refresh) {
 function clearToken() {
   localStorage.removeItem("faiaudit_token");
   localStorage.removeItem("faiaudit_refresh");
+  localStorage.removeItem("faiaudit_view");
 }
 
 function authHeaders() {
@@ -75,6 +76,11 @@ function showView(view) {
   authView.hidden = view !== "auth";
   appView.hidden = view !== "app";
   settingsView.hidden = view !== "settings";
+  // Ingat halaman terakhir supaya reload (Ctrl+R) / restart server tidak
+  // melempar user kembali ke dashboard. Layar auth tidak disimpan.
+  if (view === "app" || view === "settings") {
+    localStorage.setItem("faiaudit_view", view);
+  }
 }
 
 async function showApp() {
@@ -332,8 +338,31 @@ clientForm.addEventListener("submit", async (event) => {
   }
 });
 
-if (getToken()) {
-  showApp();
-} else {
-  showAuth();
+// Pulihkan sesi saat halaman dibuka/di-reload: kalau ada token, kembalikan ke
+// halaman terakhir (dashboard atau pengaturan). loadMe() lewat apiFetch akan
+// otomatis refresh token kalau sudah kedaluwarsa; kalau token benar-benar mati
+// (refresh gagal), lempar ke layar login.
+async function restoreSession() {
+  if (!getToken()) {
+    showAuth();
+    return;
+  }
+  const res = await apiFetch("/api/me");
+  if (!res.ok) {
+    clearToken();
+    showAuth("Sesi berakhir, silakan masuk kembali.");
+    return;
+  }
+  const me = await res.json();
+  clientPanel.hidden = !me.is_master;
+
+  if (localStorage.getItem("faiaudit_view") === "settings") {
+    showView("settings");
+    await loadClients();
+  } else {
+    showView("app");
+    await loadDashboard();
+  }
 }
+
+restoreSession();
