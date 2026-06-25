@@ -2,6 +2,8 @@ const authView = document.getElementById("authView");
 const appView = document.getElementById("appView");
 const salesView = document.getElementById("salesView");
 const settingsView = document.getElementById("settingsView");
+const kanbanView = document.getElementById("kanbanView");
+const analyticsView = document.getElementById("analyticsView");
 const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
@@ -22,6 +24,16 @@ const introClose = document.getElementById("introClose");
 const leadModalOverlay = document.getElementById("leadModalOverlay");
 const leadModalContent = document.getElementById("leadModalContent");
 const leadModalClose = document.getElementById("leadModalClose");
+const kanbanBoard = document.getElementById("kanbanBoard");
+const analyticsGrid = document.getElementById("analyticsGrid");
+const filterSearch = document.getElementById("filterSearch");
+const filterStage = document.getElementById("filterStage");
+const filterRisk = document.getElementById("filterRisk");
+const exportCsvBtn = document.getElementById("exportCsv");
+const notifyForm = document.getElementById("notifyForm");
+const notifyNumberInput = document.getElementById("notifyNumber");
+const notifyError = document.getElementById("notifyError");
+const notifySuccess = document.getElementById("notifySuccess");
 
 function getToken() {
   return localStorage.getItem("faiaudit_token") || "";
@@ -87,9 +99,11 @@ function showView(view) {
   appView.hidden = view !== "app";
   salesView.hidden = view !== "sales";
   settingsView.hidden = view !== "settings";
+  kanbanView.hidden = view !== "kanban";
+  analyticsView.hidden = view !== "analytics";
   // Ingat halaman terakhir supaya reload (Ctrl+R) / restart server tidak
   // melempar user kembali ke dashboard. Layar auth tidak disimpan.
-  if (view === "app" || view === "sales" || view === "settings") {
+  if (view === "app" || view === "sales" || view === "settings" || view === "kanban" || view === "analytics") {
     localStorage.setItem("faiaudit_view", view);
   }
   document.querySelectorAll(".nav-link").forEach((btn) => {
@@ -105,6 +119,8 @@ async function goToView(view) {
   if (view === "app") return showApp();
   if (view === "sales") return showSales();
   if (view === "settings") return showSettings();
+  if (view === "kanban") return showKanban();
+  if (view === "analytics") return showAnalytics();
 }
 
 async function showApp() {
@@ -122,6 +138,17 @@ async function showSales() {
 async function showSettings() {
   showView("settings");
   await loadClients();
+  await loadNotifyNumber();
+}
+
+async function showKanban() {
+  showView("kanban");
+  await loadKanban();
+}
+
+async function showAnalytics() {
+  showView("analytics");
+  await loadAnalytics();
 }
 
 const INTRO_SEEN_KEY = "faiaudit_intro_seen";
@@ -194,6 +221,8 @@ function logout() {
 
 document.getElementById("logout").addEventListener("click", logout);
 document.getElementById("logoutSettings").addEventListener("click", logout);
+document.getElementById("logoutKanban").addEventListener("click", logout);
+document.getElementById("logoutAnalytics").addEventListener("click", logout);
 
 function stageBadge(stage) {
   const span = document.createElement("span");
@@ -203,8 +232,25 @@ function stageBadge(stage) {
 }
 
 const FUNNEL_STAGES = ["new", "contacted", "interested", "negotiation", "closed_won", "closed_lost"];
+const STAGE_LABEL = {
+  new: "Baru",
+  contacted: "Kontak",
+  interested: "Tertarik",
+  negotiation: "Negosiasi",
+  closed_won: "Closing",
+  closed_lost: "Hilang",
+};
 
 const RISK_LABEL = { rendah: "Rendah", sedang: "Sedang", tinggi: "Tinggi", selesai: "Selesai" };
+
+// Isi <option> stage sekali saja dari FUNNEL_STAGES (single source of truth)
+// supaya filter dashboard tidak perlu di-hardcode terpisah di HTML.
+FUNNEL_STAGES.forEach((s) => {
+  const opt = document.createElement("option");
+  opt.value = s;
+  opt.textContent = STAGE_LABEL[s] || s;
+  filterStage.appendChild(opt);
+});
 
 function riskBadge(risk) {
   const span = document.createElement("span");
@@ -255,34 +301,28 @@ function renderRiskBanner(rows) {
   riskBanner.appendChild(list);
 }
 
-async function loadDashboard() {
-  const res = await apiFetch("/api/dashboard");
-  if (res.status === 401 || res.status === 403) {
-    clearToken();
-    return showAuth("Sesi berakhir, silakan masuk kembali.");
-  }
+// Cache hasil fetch terakhir supaya filter/export tidak perlu fetch ulang —
+// hanya re-render dari data yang sudah ada di memori.
+let dashboardRows = [];
 
-  const rows = await res.json();
+function matchesFilters(r) {
+  const search = filterSearch.value.trim().toLowerCase();
+  if (search && !(r.lead_name || "").toLowerCase().includes(search)) return false;
+  if (filterStage.value && r.funnel_stage !== filterStage.value) return false;
+  if (filterRisk.value && (r.risk?.level || "") !== filterRisk.value) return false;
+  return true;
+}
+
+function renderDashboardRows(rows) {
   sheetBody.innerHTML = "";
-
-  if (!res.ok) {
-    riskBanner.hidden = true;
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 11;
-    td.textContent = rows.error || "Gagal memuat data";
-    tr.appendChild(td);
-    sheetBody.appendChild(tr);
-    return;
-  }
-
-  renderRiskBanner(rows);
 
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 11;
-    td.textContent = "Belum ada lead. Tambahkan sales dan tunggu chat masuk.";
+    td.textContent = dashboardRows.length
+      ? "Tidak ada lead yang cocok dengan filter."
+      : "Belum ada lead. Tambahkan sales dan tunggu chat masuk.";
     tr.appendChild(td);
     sheetBody.appendChild(tr);
     return;
@@ -344,6 +384,299 @@ async function loadDashboard() {
     sheetBody.appendChild(tr);
   }
 }
+
+function applyDashboardFilters() {
+  renderDashboardRows(dashboardRows.filter(matchesFilters));
+}
+
+filterSearch.addEventListener("input", applyDashboardFilters);
+filterStage.addEventListener("change", applyDashboardFilters);
+filterRisk.addEventListener("change", applyDashboardFilters);
+
+function csvEscape(value) {
+  const s = String(value ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Export hanya baris yang sedang terlihat (sudah terfilter) — supaya export
+// konsisten dengan apa yang dilihat user di tabel, tanpa endpoint baru.
+exportCsvBtn.addEventListener("click", () => {
+  const rows = dashboardRows.filter(matchesFilters);
+  const headers = ["Sales", "Lead", "Status WA", "Stage Sebelumnya", "Funnel Stage", "Skor", "Risiko", "Catatan Analisis", "Evaluasi", "Dianalisis"];
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const r of rows) {
+    lines.push(
+      [
+        r.staff_name,
+        r.lead_name,
+        r.wa_status,
+        r.previous_stage,
+        r.funnel_stage,
+        r.score,
+        r.risk?.level,
+        r.analysis_notes,
+        r.evaluation,
+        r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "",
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `faiaudit-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+async function loadDashboard() {
+  const res = await apiFetch("/api/dashboard");
+  if (res.status === 401 || res.status === 403) {
+    clearToken();
+    return showAuth("Sesi berakhir, silakan masuk kembali.");
+  }
+
+  const rows = await res.json();
+
+  if (!res.ok) {
+    riskBanner.hidden = true;
+    sheetBody.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = rows.error || "Gagal memuat data";
+    tr.appendChild(td);
+    sheetBody.appendChild(tr);
+    return;
+  }
+
+  dashboardRows = rows;
+  renderRiskBanner(rows);
+  applyDashboardFilters();
+}
+
+// ---- Kanban ----
+async function loadKanban() {
+  kanbanBoard.innerHTML = '<p class="hint">Memuat…</p>';
+  const res = await apiFetch("/api/dashboard");
+  if (res.status === 401 || res.status === 403) {
+    clearToken();
+    return showAuth("Sesi berakhir, silakan masuk kembali.");
+  }
+  const rows = await res.json();
+  if (!res.ok) {
+    kanbanBoard.innerHTML = `<p class="error">${rows.error || "Gagal memuat data"}</p>`;
+    return;
+  }
+  renderKanban(rows);
+}
+
+function renderKanban(rows) {
+  kanbanBoard.innerHTML = "";
+  for (const stage of FUNNEL_STAGES) {
+    const col = document.createElement("div");
+    col.className = "kanban-column";
+    col.dataset.stage = stage;
+
+    const header = document.createElement("div");
+    header.className = "kanban-column-header";
+    const leadsInStage = rows.filter((r) => r.funnel_stage === stage);
+    header.textContent = `${STAGE_LABEL[stage] || stage} (${leadsInStage.length})`;
+    col.appendChild(header);
+
+    const cardList = document.createElement("div");
+    cardList.className = "kanban-card-list";
+
+    for (const r of leadsInStage) {
+      const card = document.createElement("div");
+      card.className = "kanban-card";
+      card.draggable = true;
+      card.dataset.leadId = r.lead_id;
+
+      const nameEl = document.createElement("a");
+      nameEl.href = "#";
+      nameEl.className = "kanban-card-name";
+      nameEl.textContent = r.lead_name || "-";
+      nameEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        openLeadDetail(r.lead_id);
+      });
+      card.appendChild(nameEl);
+
+      const meta = document.createElement("div");
+      meta.className = "kanban-card-meta";
+      meta.textContent = r.staff_name || "-";
+      card.appendChild(meta);
+      card.appendChild(riskBadge(r.risk));
+
+      card.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", String(r.lead_id));
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+
+      cardList.appendChild(card);
+    }
+
+    col.appendChild(cardList);
+
+    col.addEventListener("dragover", (e) => e.preventDefault());
+    col.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      const leadId = e.dataTransfer.getData("text/plain");
+      if (!leadId) return;
+      const res = await apiFetch(`/api/leads/${leadId}/stage`, {
+        method: "PATCH",
+        body: JSON.stringify({ funnel_stage: stage }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal mengubah stage");
+        return;
+      }
+      await loadKanban();
+    });
+
+    kanbanBoard.appendChild(col);
+  }
+}
+
+// ---- Analitik ----
+function analyticsCard(title, rowsOfPairs) {
+  const card = document.createElement("div");
+  card.className = "analytics-card";
+  const h = document.createElement("h3");
+  h.textContent = title;
+  card.appendChild(h);
+  const list = document.createElement("ul");
+  list.className = "analytics-list";
+  for (const [label, value] of rowsOfPairs) {
+    const li = document.createElement("li");
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = label;
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "analytics-value";
+    valueSpan.textContent = value;
+    li.append(labelSpan, valueSpan);
+    list.appendChild(li);
+  }
+  card.appendChild(list);
+  return card;
+}
+
+async function loadAnalytics() {
+  analyticsGrid.innerHTML = '<p class="hint">Memuat…</p>';
+  const res = await apiFetch("/api/dashboard");
+  if (res.status === 401 || res.status === 403) {
+    clearToken();
+    return showAuth("Sesi berakhir, silakan masuk kembali.");
+  }
+  const rows = await res.json();
+  if (!res.ok) {
+    analyticsGrid.innerHTML = `<p class="error">${rows.error || "Gagal memuat data"}</p>`;
+    return;
+  }
+  renderAnalytics(rows);
+}
+
+function renderAnalytics(rows) {
+  analyticsGrid.innerHTML = "";
+
+  const total = rows.length || 1;
+
+  const stagePairs = FUNNEL_STAGES.map((s) => {
+    const count = rows.filter((r) => r.funnel_stage === s).length;
+    return [STAGE_LABEL[s] || s, `${count} (${Math.round((count / total) * 100)}%)`];
+  });
+  analyticsGrid.appendChild(analyticsCard("Distribusi Funnel Stage", stagePairs));
+
+  const riskLevels = ["tinggi", "sedang", "rendah", "selesai"];
+  const riskPairs = riskLevels.map((level) => {
+    const count = rows.filter((r) => (r.risk?.level || "") === level).length;
+    return [RISK_LABEL[level], `${count} (${Math.round((count / total) * 100)}%)`];
+  });
+  analyticsGrid.appendChild(analyticsCard("Distribusi Risiko", riskPairs));
+
+  // Leaderboard sales: rata-rata skor + total lead + closing, dihitung dari
+  // data dashboard yang sudah ada — tanpa query/endpoint baru.
+  const bySales = new Map();
+  for (const r of rows) {
+    const name = r.staff_name || "-";
+    const entry = bySales.get(name) || { total: 0, scoreSum: 0, scoreCount: 0, closedWon: 0 };
+    entry.total += 1;
+    if (typeof r.score === "number") {
+      entry.scoreSum += r.score;
+      entry.scoreCount += 1;
+    }
+    if (r.funnel_stage === "closed_won") entry.closedWon += 1;
+    bySales.set(name, entry);
+  }
+  const leaderboard = [...bySales.entries()]
+    .map(([name, e]) => ({
+      name,
+      total: e.total,
+      avgScore: e.scoreCount ? Math.round(e.scoreSum / e.scoreCount) : null,
+      closedWon: e.closedWon,
+    }))
+    .sort((a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1));
+
+  const leaderboardCard = document.createElement("div");
+  leaderboardCard.className = "analytics-card analytics-card-wide";
+  const h = document.createElement("h3");
+  h.textContent = "Leaderboard Sales";
+  leaderboardCard.appendChild(h);
+
+  if (!leaderboard.length) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "Belum ada data lead.";
+    leaderboardCard.appendChild(p);
+  } else {
+    const table = document.createElement("table");
+    table.className = "leaderboard-table";
+    table.innerHTML = "<thead><tr><th>Sales</th><th>Total Lead</th><th>Skor Rata-rata</th><th>Closing</th></tr></thead>";
+    const tbody = document.createElement("tbody");
+    for (const entry of leaderboard) {
+      const tr = document.createElement("tr");
+      tr.append(cell(entry.name), cell(entry.total), cell(entry.avgScore ?? "-"), cell(entry.closedWon));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    leaderboardCard.appendChild(table);
+  }
+  analyticsGrid.appendChild(leaderboardCard);
+}
+
+// ---- Reminder WA pribadi (settings) ----
+async function loadNotifyNumber() {
+  const res = await apiFetch("/api/me");
+  if (!res.ok) return;
+  const me = await res.json();
+  notifyNumberInput.value = me.notify_wa_number || "";
+}
+
+notifyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  notifyError.textContent = "";
+  notifySuccess.hidden = true;
+  const value = notifyNumberInput.value.trim();
+
+  try {
+    const res = await apiFetch("/api/me/notify-number", {
+      method: "PATCH",
+      body: JSON.stringify({ notify_wa_number: value || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Gagal menyimpan nomor");
+    notifySuccess.hidden = false;
+  } catch (err) {
+    notifyError.textContent = err.message;
+  }
+});
 
 // ---- Modal helpers ----
 let pairPollTimer = null;
@@ -1077,9 +1410,16 @@ async function restoreSession() {
   if (lastView === "settings") {
     showView("settings");
     await loadClients();
+    await loadNotifyNumber();
   } else if (lastView === "sales") {
     showView("sales");
     await loadStaff();
+  } else if (lastView === "kanban") {
+    showView("kanban");
+    await loadKanban();
+  } else if (lastView === "analytics") {
+    showView("analytics");
+    await loadAnalytics();
   } else {
     showView("app");
     await loadDashboard();

@@ -15,7 +15,7 @@ export async function requireOwner(req, res, next) {
 
   const { data: owner, error: ownerError } = await supabase
     .from("owners")
-    .select("id, name, business_name, is_master")
+    .select("id, name, business_name, is_master, notify_wa_number")
     .eq("user_id", userData.user.id)
     .single();
   if (ownerError || !owner) {

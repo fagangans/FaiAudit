@@ -57,7 +57,25 @@ router.get("/me", requireOwner, (req, res) => {
     name: req.owner.name,
     business_name: req.owner.business_name,
     is_master: req.owner.is_master,
+    notify_wa_number: req.owner.notify_wa_number,
   });
+});
+
+// Nomor WA pribadi owner untuk reminder lead berisiko tinggi — diatur
+// sendiri oleh tiap owner (bukan master), dikirim lewat sesi staff yang
+// sedang terhubung lewat reminderScheduler.
+router.patch("/me/notify-number", requireOwner, async (req, res) => {
+  const { notify_wa_number } = req.body || {};
+  if (notify_wa_number !== null && !WA_NUMBER_RE.test(notify_wa_number || "")) {
+    return res.status(400).json({ error: "notify_wa_number harus format internasional tanpa '+', contoh 62812xxxxxxx (atau null untuk menonaktifkan)" });
+  }
+
+  const { error } = await supabase
+    .from("owners")
+    .update({ notify_wa_number })
+    .eq("id", req.ownerId);
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ ok: true, notify_wa_number });
 });
 
 // Ganti password sendiri (master & client) — wajib ada karena password

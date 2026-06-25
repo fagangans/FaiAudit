@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=14" />
+  <link rel="stylesheet" href="style.css?v=15" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -26,6 +26,8 @@
       <h1><span class="mark">Fai</span>Audit</h1>
       <nav class="main-nav">
         <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
+        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
         <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
         <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
       </nav>
@@ -37,6 +39,20 @@
 
     <main>
       <div class="dashboard-topbar">
+        <div class="filter-bar">
+          <input type="search" id="filterSearch" placeholder="Cari nama lead..." />
+          <select id="filterStage">
+            <option value="">Semua Stage</option>
+          </select>
+          <select id="filterRisk">
+            <option value="">Semua Risiko</option>
+            <option value="tinggi">Tinggi</option>
+            <option value="sedang">Sedang</option>
+            <option value="rendah">Rendah</option>
+            <option value="selesai">Selesai</option>
+          </select>
+          <button type="button" id="exportCsv">Export CSV</button>
+        </div>
         <div class="legend-wrap">
           <button type="button" class="legend-toggle" id="legendToggle" aria-label="Penjelasan kolom" aria-expanded="false">ⓘ Apa arti kolom ini?</button>
           <dl class="legend-list" id="legendList" hidden>
@@ -80,6 +96,8 @@
       <h1><span class="mark">Fai</span>Audit — Kelola Sales</h1>
       <nav class="main-nav">
         <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
+        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
         <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
         <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
       </nav>
@@ -98,11 +116,52 @@
     </main>
   </div>
 
+  <div id="kanbanView" hidden>
+    <header>
+      <h1><span class="mark">Fai</span>Audit — Kanban</h1>
+      <nav class="main-nav">
+        <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
+        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
+        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
+        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
+      </nav>
+      <div class="toolbar">
+        <button id="logoutKanban">Keluar</button>
+      </div>
+    </header>
+    <main>
+      <p class="hint">Geser kartu lead antar kolom untuk mengubah funnel stage secara cepat.</p>
+      <div class="kanban-board" id="kanbanBoard"></div>
+    </main>
+  </div>
+
+  <div id="analyticsView" hidden>
+    <header>
+      <h1><span class="mark">Fai</span>Audit — Analitik</h1>
+      <nav class="main-nav">
+        <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
+        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
+        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
+        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
+      </nav>
+      <div class="toolbar">
+        <button id="logoutAnalytics">Keluar</button>
+      </div>
+    </header>
+    <main>
+      <div class="analytics-grid" id="analyticsGrid"></div>
+    </main>
+  </div>
+
   <div id="settingsView" hidden>
     <header>
       <h1><span class="mark">Fai</span>Audit — Pengaturan</h1>
       <nav class="main-nav">
         <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
+        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
         <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
         <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
       </nav>
@@ -120,6 +179,17 @@
         </form>
         <p id="passwordError" class="error"></p>
         <p id="passwordSuccess" class="success" hidden>Password berhasil diganti.</p>
+      </div>
+
+      <div class="settings-panel">
+        <h2>Reminder Lead Berisiko Tinggi via WA</h2>
+        <p class="hint">Nomor WA pribadi Anda akan menerima pesan ringkasan (maks. 1x/hari) kalau ada lead "risiko tinggi". Pesan dikirim lewat sesi WA staff yang sedang terhubung.</p>
+        <form id="notifyForm">
+          <input id="notifyNumber" placeholder="Nomor WA, format 62812xxxxxxx (kosongkan untuk nonaktif)" />
+          <button type="submit">Simpan</button>
+        </form>
+        <p id="notifyError" class="error"></p>
+        <p id="notifySuccess" class="success" hidden>Tersimpan.</p>
       </div>
 
       <div class="settings-panel" id="clientPanel">
@@ -170,6 +240,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

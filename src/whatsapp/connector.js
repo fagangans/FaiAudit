@@ -287,6 +287,34 @@ export function stopStaffSession(staffId) {
   }
 }
 
+// Satu-satunya pengecualian terhadap "audit-only, tidak pernah balas":
+// reminder lead berisiko tinggi dikirim ke NOMOR PRIBADI OWNER SENDIRI
+// (bukan ke lead), lewat sesi staff milik owner itu yang sedang terhubung
+// — tidak membuka sesi baru. Kalau owner tidak punya staff yang sedang
+// connected, reminder otomatis dilewati (dicoba lagi di siklus berikutnya).
+export async function sendOwnerNotification(ownerId, notifyWaNumber, text) {
+  if (!notifyWaNumber) return false;
+  const { data: staffRows, error } = await supabase
+    .from("staff")
+    .select("id")
+    .eq("owner_id", ownerId)
+    .eq("wa_session_status", "connected");
+  if (error || !staffRows?.length) return false;
+
+  const jid = `${notifyWaNumber}@s.whatsapp.net`;
+  for (const staff of staffRows) {
+    const sock = activeSessions.get(staff.id);
+    if (!sock) continue;
+    try {
+      await sock.sendMessage(jid, { text });
+      return true;
+    } catch (err) {
+      logger.error({ ownerId, staffId: staff.id, err: err.message }, "gagal mengirim reminder WA ke owner");
+    }
+  }
+  return false;
+}
+
 // Dipanggil sekali saat server start: sambungkan kembali semua staff yang
 // sudah pernah pairing (creds tersimpan di wa-sessions/), supaya restart
 // server/VPS tidak diam-diam menghentikan audit tanpa staff/owner sadar.
