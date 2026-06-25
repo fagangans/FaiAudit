@@ -1,11 +1,41 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { supabase, supabaseAuth } from "../supabase.js";
-import { startStaffSession, stopStaffSession } from "../whatsapp/connector.js";
+import { startStaffSession, stopStaffSession, getPairingState } from "../whatsapp/connector.js";
 import { analyzeLead } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
 
 export const router = express.Router();
+
+const PAIR_TIMEOUT_MS = 15000;
+
+// Mulai sesi WA lalu tunggu artefak pairing pertama (QR / kode) atau status
+// "connected" muncul, supaya respons HTTP bisa langsung membawa sesuatu untuk
+// ditampilkan. QR yang ter-refresh berikutnya diambil lewat /pair-status.
+function beginPairing({ staffId, ownerId, phoneNumber, method }) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ method, qr: null, pairing_code: null, ...payload });
+    };
+    const timer = setTimeout(() => finish({ pending: true }), PAIR_TIMEOUT_MS);
+
+    startStaffSession({
+      staffId,
+      ownerId,
+      phoneNumber,
+      method,
+      onQR: (qr) => finish({ qr }),
+      onPairingCode: (code) => finish({ pairing_code: code }),
+      onStatus: (status) => {
+        if (status === "connected") finish({ connected: true });
+      },
+    }).catch((err) => finish({ error: err.message }));
+  });
+}
 
 // Setiap panggilan AI provider berbayar per-token — batasi supaya klik
 // berulang atau bug di frontend tidak membengkakkan tagihan OpenRouter.
@@ -57,8 +87,13 @@ router.post("/me/password", requireOwner, async (req, res) => {
   res.json({ ok: true });
 });
 
+function normalizeMethod(value) {
+  return value === "code" ? "code" : "qr"; // default QR
+}
+
 router.post("/staff", requireOwner, async (req, res) => {
   const { name, wa_number } = req.body || {};
+  const method = normalizeMethod(req.body?.method);
   if (!name || typeof name !== "string" || !name.trim()) {
     return res.status(400).json({ error: "name wajib diisi" });
   }
@@ -71,22 +106,67 @@ router.post("/staff", requireOwner, async (req, res) => {
     .insert({ owner_id: req.ownerId, name: name.trim(), wa_number, wa_session_status: "pairing" })
     .select()
     .single();
-  if (error) return res.status(400).json({ error: error.message });
-
-  try {
-    let pairingCode = null;
-    await startStaffSession({
-      staffId: staff.id,
-      ownerId: req.ownerId,
-      phoneNumber: wa_number,
-      onPairingCode: (code) => {
-        pairingCode = code;
-      },
-    });
-    res.json({ ...staff, pairing_code: pairingCode });
-  } catch (err) {
-    res.status(500).json({ error: `Gagal memulai sesi WhatsApp: ${err.message}` });
+  if (error) {
+    // 23505 = unique_violation pada (owner_id, wa_number): nomor sudah pernah
+    // didaftarkan. Jangan bocorkan error mentah Postgres; arahkan user untuk
+    // menghubungkan ulang staff yang sudah ada (mis. pairing sebelumnya gagal).
+    if (error.code === "23505") {
+      const { data: existing } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("owner_id", req.ownerId)
+        .eq("wa_number", wa_number)
+        .maybeSingle();
+      return res.status(409).json({
+        error: "Nomor WhatsApp ini sudah terdaftar di akun Anda.",
+        staff_id: existing?.id || null,
+      });
+    }
+    return res.status(400).json({ error: error.message });
   }
+
+  const pairing = await beginPairing({ staffId: staff.id, ownerId: req.ownerId, phoneNumber: wa_number, method });
+  res.json({ ...staff, ...pairing });
+});
+
+// Mulai/ulangi pairing untuk staff yang sudah ada — dipakai untuk re-pair
+// (nomor duplikat / pairing gagal sebelumnya) dan untuk berganti metode
+// QR <-> kode tanpa membuat baris staff baru.
+router.post("/staff/:id/pair", requireOwner, async (req, res) => {
+  const method = normalizeMethod(req.body?.method);
+  const { data: staff, error: findError } = await supabase
+    .from("staff")
+    .select("id, owner_id, wa_number")
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .maybeSingle();
+  if (findError || !staff) return res.status(404).json({ error: "Staff tidak ditemukan" });
+
+  const pairing = await beginPairing({
+    staffId: staff.id,
+    ownerId: staff.owner_id,
+    phoneNumber: staff.wa_number,
+    method,
+  });
+  res.json({ staff_id: staff.id, ...pairing });
+});
+
+// Polling ringan dari dashboard: QR yang ter-refresh + status terkini.
+router.get("/staff/:id/pair-status", requireOwner, async (req, res) => {
+  const { data: staff, error } = await supabase
+    .from("staff")
+    .select("id, wa_session_status")
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .maybeSingle();
+  if (error || !staff) return res.status(404).json({ error: "Staff tidak ditemukan" });
+
+  const st = getPairingState(staff.id);
+  res.json({
+    status: st?.status || staff.wa_session_status,
+    qr: st?.qr || null,
+    pairing_code: st?.code || null,
+  });
 });
 
 router.delete("/staff/:id", requireOwner, async (req, res) => {

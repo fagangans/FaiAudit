@@ -12,6 +12,9 @@ const passwordForm = document.getElementById("passwordForm");
 const passwordError = document.getElementById("passwordError");
 const passwordSuccess = document.getElementById("passwordSuccess");
 const clientPanel = document.getElementById("clientPanel");
+const modalOverlay = document.getElementById("modalOverlay");
+const modalContent = document.getElementById("modalContent");
+const modalClose = document.getElementById("modalClose");
 
 function getToken() {
   return localStorage.getItem("faiaudit_token") || "";
@@ -217,24 +220,223 @@ async function loadDashboard() {
   }
 }
 
-async function addStaff() {
-  const name = prompt("Nama sales/staff?");
-  if (!name) return;
-  const wa_number = prompt("Nomor WhatsApp (format 62xxxxxxxxxx, tanpa +)?");
-  if (!wa_number) return;
+// ---- Modal helpers ----
+let pairPollTimer = null;
 
-  const res = await apiFetch("/api/staff", {
-    method: "POST",
-    body: JSON.stringify({ name, wa_number }),
+function stopPairPolling() {
+  if (pairPollTimer) clearInterval(pairPollTimer);
+  pairPollTimer = null;
+}
+
+function openModal() {
+  modalOverlay.hidden = false;
+}
+
+function closeModal() {
+  stopPairPolling();
+  modalOverlay.hidden = true;
+  modalContent.innerHTML = "";
+}
+
+modalClose.addEventListener("click", closeModal);
+modalOverlay.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) closeModal();
+});
+
+// Field read-only dengan tombol Salin. navigator.clipboard hanya tersedia di
+// konteks aman (https/localhost); di http://IP biasa ia tidak ada, jadi
+// sediakan fallback execCommand("copy") lewat select().
+function copyableField(labelText, value) {
+  const wrap = document.createElement("div");
+  wrap.className = "copy-field";
+  const label = document.createElement("label");
+  label.textContent = labelText;
+  const row = document.createElement("div");
+  row.className = "copy-row";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.readOnly = true;
+  input.value = value;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Salin";
+  btn.addEventListener("click", async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        input.select();
+        document.execCommand("copy");
+      }
+      btn.textContent = "Tersalin ✓";
+    } catch {
+      input.select();
+      document.execCommand("copy");
+      btn.textContent = "Tersalin ✓";
+    }
+    setTimeout(() => (btn.textContent = "Salin"), 1500);
   });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error || "Gagal menambah sales");
-  alert(`Sales ditambahkan. Pairing code WhatsApp: ${data.pairing_code || "(cek log server)"}`);
-  loadDashboard();
+  row.append(input, btn);
+  wrap.append(label, row);
+  return wrap;
+}
+
+function renderPairing(result, staffId) {
+  const area = document.getElementById("pairArea");
+  if (!area) return;
+  area.innerHTML = "";
+
+  if (result.error) {
+    area.innerHTML = `<p class="error">${result.error}</p>`;
+    return;
+  }
+  if (result.connected) {
+    area.innerHTML = '<p class="success">Nomor sudah terhubung ✓</p>';
+    loadDashboard();
+    return;
+  }
+
+  if (result.method === "code") {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent =
+      "Di WhatsApp HP sales: Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon, lalu masukkan kode ini:";
+    area.appendChild(hint);
+    if (result.pairing_code) {
+      area.appendChild(copyableField("Kode pairing", result.pairing_code));
+    } else {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "Menyiapkan kode…";
+      area.appendChild(p);
+    }
+  } else {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent =
+      "Di WhatsApp HP sales: Perangkat tertaut → Tautkan perangkat, lalu scan QR ini:";
+    if (result.qr) {
+      const img = document.createElement("img");
+      img.className = "qr-img";
+      img.src = result.qr;
+      img.alt = "QR pairing WhatsApp";
+      area.append(img, hint);
+    } else {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "Menyiapkan QR…";
+      area.appendChild(p);
+    }
+  }
+
+  startPairPolling(staffId);
+}
+
+function startPairPolling(staffId) {
+  stopPairPolling();
+  pairPollTimer = setInterval(async () => {
+    const res = await apiFetch(`/api/staff/${staffId}/pair-status`);
+    if (!res.ok) return;
+    const st = await res.json();
+    const area = document.getElementById("pairArea");
+    if (!area) {
+      stopPairPolling();
+      return;
+    }
+    if (st.status === "connected") {
+      stopPairPolling();
+      area.innerHTML = '<p class="success">Berhasil terhubung ✓</p>';
+      loadDashboard();
+      setTimeout(closeModal, 1500);
+      return;
+    }
+    // QR di-refresh berkala oleh WhatsApp; perbarui gambar kalau berubah.
+    if (st.qr) {
+      const img = area.querySelector("img.qr-img");
+      if (img && img.src !== st.qr) img.src = st.qr;
+    }
+  }, 3000);
+}
+
+function openAddSalesModal() {
+  stopPairPolling();
+  modalContent.innerHTML = "";
+
+  const h = document.createElement("h2");
+  h.textContent = "Tambah Sales / Staff";
+
+  const form = document.createElement("form");
+  form.className = "modal-form";
+  form.innerHTML = `
+    <input id="salesName" type="text" placeholder="Nama sales/staff" required />
+    <input id="salesNumber" type="text" placeholder="Nomor WA (62xxxxxxxxxx, tanpa +)" required />
+    <div class="method-row">
+      <label><input type="radio" name="pairMethod" value="qr" checked /> QR Code</label>
+      <label><input type="radio" name="pairMethod" value="code" /> Kode pairing</label>
+    </div>
+    <button type="submit">Mulai Pairing</button>
+  `;
+
+  const err = document.createElement("p");
+  err.className = "error";
+  const area = document.createElement("div");
+  area.id = "pairArea";
+  area.className = "pair-area";
+
+  modalContent.append(h, form, err, area);
+  openModal();
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    err.textContent = "";
+    const name = document.getElementById("salesName").value.trim();
+    const wa_number = document.getElementById("salesNumber").value.trim();
+    const method = form.querySelector("input[name=pairMethod]:checked").value;
+    area.innerHTML = '<p class="hint">Memproses…</p>';
+
+    const res = await apiFetch("/api/staff", {
+      method: "POST",
+      body: JSON.stringify({ name, wa_number, method }),
+    });
+    const data = await res.json();
+
+    if (res.status === 409 && data.staff_id) {
+      area.innerHTML = "";
+      const msg = document.createElement("p");
+      msg.className = "hint";
+      msg.textContent = `${data.error} Hubungkan ulang nomor ini?`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Hubungkan ulang";
+      btn.addEventListener("click", async () => {
+        area.innerHTML = '<p class="hint">Memproses…</p>';
+        const r2 = await apiFetch(`/api/staff/${data.staff_id}/pair`, {
+          method: "POST",
+          body: JSON.stringify({ method }),
+        });
+        const d2 = await r2.json();
+        if (!r2.ok) {
+          area.innerHTML = `<p class="error">${d2.error || "Gagal"}</p>`;
+          return;
+        }
+        renderPairing(d2, data.staff_id);
+      });
+      area.append(msg, btn);
+      return;
+    }
+
+    if (!res.ok) {
+      area.innerHTML = "";
+      err.textContent = data.error || "Gagal menambah sales";
+      return;
+    }
+
+    renderPairing(data, data.id);
+  });
 }
 
 document.getElementById("refresh").addEventListener("click", loadDashboard);
-document.getElementById("addStaff").addEventListener("click", addStaff);
+document.getElementById("addStaff").addEventListener("click", openAddSalesModal);
 
 openSettingsBtn.addEventListener("click", async () => {
   showView("settings");
@@ -315,6 +517,24 @@ passwordForm.addEventListener("submit", async (event) => {
   }
 });
 
+function showClientCreated(data) {
+  stopPairPolling();
+  modalContent.innerHTML = "";
+  const h = document.createElement("h2");
+  h.textContent = `Client "${data.name}" terdaftar`;
+  const p = document.createElement("p");
+  p.className = "hint";
+  p.textContent =
+    "Salin & sampaikan kredensial ini ke client. Password hanya ditampilkan sekali — setelah modal ditutup tidak bisa dilihat lagi.";
+  modalContent.append(
+    h,
+    p,
+    copyableField("Email", data.email),
+    copyableField("Password sementara", data.temp_password),
+  );
+  openModal();
+}
+
 clientForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clientError.textContent = "";
@@ -330,7 +550,7 @@ clientForm.addEventListener("submit", async (event) => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Gagal mendaftarkan client");
-    alert(`Client "${data.name}" terdaftar.\nEmail: ${data.email}\nPassword sementara: ${data.temp_password}\n\nSampaikan password ini ke client lalu sarankan mereka segera login.`);
+    showClientCreated(data);
     clientForm.reset();
     loadClients();
   } catch (err) {

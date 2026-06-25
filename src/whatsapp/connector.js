@@ -3,6 +3,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
 } from "@whiskeysockets/baileys";
+import QRCode from "qrcode";
 import { supabase } from "../supabase.js";
 import { logger } from "../logger.js";
 
@@ -15,6 +16,14 @@ import { logger } from "../logger.js";
 
 const activeSessions = new Map(); // staffId -> socket
 const retryState = new Map(); // staffId -> { attempt, timer }
+// Artefak pairing terbaru per staff supaya endpoint /pair-status bisa
+// mengirim QR yang ter-refresh & status terkini ke dashboard tanpa membuka
+// soket baru tiap polling.
+const pairingState = new Map(); // staffId -> { method, qr, code, status }
+
+export function getPairingState(staffId) {
+  return pairingState.get(staffId) || null;
+}
 
 const BASE_DELAY_MS = 2000;
 const MAX_DELAY_MS = 5 * 60 * 1000; // 5 minutes
@@ -60,7 +69,15 @@ function extractText(message) {
   );
 }
 
-export async function startStaffSession({ staffId, ownerId, phoneNumber, onPairingCode, onStatus }) {
+export async function startStaffSession({
+  staffId,
+  ownerId,
+  phoneNumber,
+  method = "qr",
+  onPairingCode,
+  onQR,
+  onStatus,
+}) {
   clearRetry(staffId);
   const sessionDir = path.resolve(process.cwd(), "wa-sessions", staffId);
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -73,15 +90,33 @@ export async function startStaffSession({ staffId, ownerId, phoneNumber, onPairi
   activeSessions.set(staffId, sock);
   sock.ev.on("creds.update", saveCreds);
 
-  if (!sock.authState.creds.registered && phoneNumber) {
+  // Metode "code": minta pairing code via nomor telepon (tanpa QR).
+  // Metode "qr" (default): jangan minta code, biarkan Baileys memancarkan
+  // string QR lewat connection.update di bawah, lalu kita render jadi gambar.
+  if (!sock.authState.creds.registered && method === "code" && phoneNumber) {
     const code = await sock.requestPairingCode(phoneNumber.trim());
+    pairingState.set(staffId, { method: "code", code, qr: null, status: "pairing" });
     onPairingCode?.(code);
   }
 
   sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect } = update;
+    const { connection, lastDisconnect, qr } = update;
+
+    // QR baru dari Baileys (di-refresh berkala). Render ke data URL PNG supaya
+    // bisa langsung ditampilkan sebagai <img src="data:..."> di dashboard.
+    if (qr && method === "qr") {
+      try {
+        const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 264 });
+        pairingState.set(staffId, { method: "qr", qr: dataUrl, code: null, status: "pairing" });
+        onQR?.(dataUrl);
+      } catch (err) {
+        logger.error({ staffId, err: err.message }, "gagal membuat QR pairing");
+      }
+    }
+
     if (connection === "open") {
       clearRetry(staffId);
+      pairingState.set(staffId, { method, qr: null, code: null, status: "connected" });
       onStatus?.("connected");
       await supabase.from("staff").update({ wa_session_status: "connected" }).eq("id", staffId);
     }

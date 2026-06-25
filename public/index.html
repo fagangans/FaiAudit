@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -95,6 +95,13 @@
     </main>
   </div>
 
-  <script src="app.js?v=6"></script>
+  <div id="modalOverlay" class="modal-overlay" hidden>
+    <div class="modal">
+      <button type="button" class="modal-close" id="modalClose" aria-label="Tutup">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="app.js?v=7"></script>
 </body>
 </html>
