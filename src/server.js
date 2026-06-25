@@ -16,7 +16,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.disable("x-powered-by");
-app.use(helmet());
+// FaiAudit dilayani lewat http://IP:port murni (tanpa TLS di depannya).
+// Default helmet menambah `upgrade-insecure-requests` di CSP + HSTS, yang
+// memaksa browser meng-upgrade semua request (style.css, app.js, fetch ke
+// /api/...) ke https:// — padahal tidak ada listener https di port ini, jadi
+// halaman jadi tak ber-style DAN login gagal di browser (curl tetap jalan
+// karena mengabaikan CSP). Matikan kedua direktif itu; aktifkan lagi kalau
+// kelak ditaruh di belakang reverse-proxy TLS (set ENABLE_HTTPS=1).
+const behindTls = process.env.ENABLE_HTTPS === "1";
+app.use(
+  helmet({
+    hsts: behindTls,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: behindTls ? {} : { upgradeInsecureRequests: null },
+    },
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
