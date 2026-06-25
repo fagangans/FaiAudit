@@ -21,10 +21,32 @@ router.use(requireOwner, requireMaster);
 router.get("/clients", async (req, res) => {
   const { data, error } = await supabase
     .from("owners")
-    .select("id, name, business_name, plan, created_at")
+    .select("id, name, business_name, plan, created_at, ai_provider")
     .eq("is_master", false)
     .order("created_at", { ascending: false });
   if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
+// Master mengatur AI provider per-client: 'scraper' (AI biasa/cepat) atau
+// 'qwen' (OpenRouter). Dipakai analyzeLead() untuk memilih provider yang
+// benar berdasarkan owner_id lead, bukan env var global.
+const AI_PROVIDERS = ["scraper", "qwen"];
+router.patch("/clients/:id/ai-provider", async (req, res) => {
+  const { ai_provider } = req.body || {};
+  if (!AI_PROVIDERS.includes(ai_provider)) {
+    return res.status(400).json({ error: `ai_provider harus salah satu dari: ${AI_PROVIDERS.join(", ")}` });
+  }
+
+  const { data, error } = await supabase
+    .from("owners")
+    .update({ ai_provider })
+    .eq("id", req.params.id)
+    .eq("is_master", false)
+    .select("id, name, ai_provider")
+    .maybeSingle();
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Client tidak ditemukan" });
   res.json(data);
 });
 

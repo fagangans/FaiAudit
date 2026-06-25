@@ -6,6 +6,7 @@ const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
 const sheetBody = document.getElementById("sheetBody");
+const riskBanner = document.getElementById("riskBanner");
 const clientForm = document.getElementById("clientForm");
 const clientError = document.getElementById("clientError");
 const clientTableBody = document.getElementById("clientTableBody");
@@ -215,6 +216,40 @@ function cell(text) {
   return td;
 }
 
+// Reminder leads berisiko tinggi (heuristik: stage lanjut + lama tanpa
+// balasan) supaya tidak terkubur di tabel besar — pakai data risk yang
+// sudah dihitung backend, tidak ada query/AI call tambahan.
+function renderRiskBanner(rows) {
+  const highRisk = rows.filter((r) => r.risk?.level === "tinggi");
+  if (!highRisk.length) {
+    riskBanner.hidden = true;
+    riskBanner.innerHTML = "";
+    return;
+  }
+
+  riskBanner.hidden = false;
+  riskBanner.innerHTML = "";
+  const title = document.createElement("strong");
+  title.textContent = `⚠️ ${highRisk.length} lead berisiko tinggi butuh tindak lanjut segera`;
+  riskBanner.appendChild(title);
+
+  const list = document.createElement("ul");
+  for (const r of highRisk.slice(0, 5)) {
+    const li = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = "#";
+    link.textContent = `${r.lead_name || "-"} (${r.staff_name || "-"})`;
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      openLeadDetail(r.lead_id);
+    });
+    li.appendChild(link);
+    li.append(` — ${r.risk.reason}`);
+    list.appendChild(li);
+  }
+  riskBanner.appendChild(list);
+}
+
 async function loadDashboard() {
   const res = await apiFetch("/api/dashboard");
   if (res.status === 401 || res.status === 403) {
@@ -226,6 +261,7 @@ async function loadDashboard() {
   sheetBody.innerHTML = "";
 
   if (!res.ok) {
+    riskBanner.hidden = true;
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 11;
@@ -234,6 +270,8 @@ async function loadDashboard() {
     sheetBody.appendChild(tr);
     return;
   }
+
+  renderRiskBanner(rows);
 
   if (!rows.length) {
     const tr = document.createElement("tr");
@@ -619,7 +657,7 @@ async function loadClients() {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
+    td.colSpan = 6;
     td.textContent = "Belum ada client.";
     tr.appendChild(td);
     clientTableBody.appendChild(tr);
@@ -628,12 +666,36 @@ async function loadClients() {
 
   for (const c of rows) {
     const tr = document.createElement("tr");
-    tr.append(
-      clientCell(c.name),
-      clientCell(c.business_name),
-      clientCell(c.plan),
-      clientCell(new Date(c.created_at).toLocaleDateString("id-ID")),
+    tr.append(clientCell(c.name), clientCell(c.business_name), clientCell(c.plan));
+
+    const providerTd = document.createElement("td");
+    const select = document.createElement("select");
+    select.className = "ai-provider-select";
+    select.append(
+      new Option("AI Biasa (Cepat)", "scraper", false, c.ai_provider === "scraper"),
+      new Option("OpenRouter", "qwen", false, c.ai_provider === "qwen"),
     );
+    select.addEventListener("change", async () => {
+      const previous = c.ai_provider;
+      select.disabled = true;
+      const res = await apiFetch(`/api/admin/clients/${c.id}/ai-provider`, {
+        method: "PATCH",
+        body: JSON.stringify({ ai_provider: select.value }),
+      });
+      const data = await res.json();
+      select.disabled = false;
+      if (!res.ok) {
+        alert(data.error || "Gagal mengubah provider AI");
+        select.value = previous;
+        return;
+      }
+      c.ai_provider = data.ai_provider;
+    });
+    providerTd.appendChild(select);
+    tr.appendChild(providerTd);
+
+    tr.appendChild(clientCell(new Date(c.created_at).toLocaleDateString("id-ID")));
+
     const actionTd = document.createElement("td");
     const btn = document.createElement("button");
     btn.textContent = "Hapus";

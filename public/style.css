@@ -57,6 +57,26 @@ header h1 .mark { color: var(--text-light); font-weight: 300; }
   font-weight: 600;
 }
 
+.risk-banner {
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  color: #fecaca;
+}
+.risk-banner ul { margin: 8px 0 0; padding-left: 20px; }
+.risk-banner li { margin-bottom: 4px; }
+.risk-banner a { color: #fecaca; text-decoration: underline; }
+
+.ai-provider-select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
 .legend-box {
   background: var(--surface);
   border: 1px solid var(--border);

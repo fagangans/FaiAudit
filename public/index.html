@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -36,6 +36,8 @@
     </header>
 
     <main>
+      <div class="risk-banner" id="riskBanner" hidden></div>
+
       <div class="legend-box" id="legendBox">
         <button type="button" class="legend-toggle" id="legendToggle">ⓘ Apa arti kolom-kolom ini?</button>
         <dl class="legend-list" id="legendList" hidden>
@@ -129,10 +131,12 @@
         </form>
         <p id="clientError" class="error"></p>
 
+        <p class="hint">Provider AI hanya bisa diatur master untuk tiap client (OpenRouter = kualitas lebih tinggi, AI Biasa/Cepat = default hemat biaya).</p>
+
         <h2>Daftar Client</h2>
         <table id="clientTable">
           <thead>
-            <tr><th>Nama</th><th>Usaha</th><th>Plan</th><th>Terdaftar</th><th></th></tr>
+            <tr><th>Nama</th><th>Usaha</th><th>Plan</th><th>Provider AI</th><th>Terdaftar</th><th></th></tr>
           </thead>
           <tbody id="clientTableBody"></tbody>
         </table>
@@ -164,6 +168,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

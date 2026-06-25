@@ -88,7 +88,9 @@ export function computeLeadRisk({ funnel_stage, score, last_message_at }) {
 export async function analyzeLead(leadId, { force = false } = {}) {
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("id, last_message_at, lead_audits(funnel_stage, analyzed_at, score, analysis_notes, evaluation, buying_signals, objections)")
+    .select(
+      "id, last_message_at, owner:owner_id(ai_provider), lead_audits(funnel_stage, analyzed_at, score, analysis_notes, evaluation, buying_signals, objections)",
+    )
     .eq("id", leadId)
     .single();
   if (leadError) throw leadError;
@@ -119,7 +121,11 @@ export async function analyzeLead(leadId, { force = false } = {}) {
   if (!history?.length) throw new Error("Belum ada riwayat chat untuk lead ini");
 
   const previousStage = lead.lead_audits?.funnel_stage || "new";
-  const provider = providers[process.env.AI_PROVIDER || "scraper"];
+  // Provider dipilih per-client (diatur master di halaman Pengaturan AI),
+  // bukan lagi lewat env var global — tiap client bisa pakai OpenRouter
+  // (qwen) atau AI biasa/cepat (scraper) secara independen.
+  const providerName = providers[lead.owner?.ai_provider] ? lead.owner.ai_provider : "scraper";
+  const provider = providers[providerName];
   const raw = await provider.complete(buildPrompt(history, previousStage));
   const result = parseResult(raw);
 
@@ -133,7 +139,7 @@ export async function analyzeLead(leadId, { force = false } = {}) {
       evaluation: result.evaluation,
       buying_signals: result.buying_signals,
       objections: result.objections,
-      ai_model: process.env.AI_PROVIDER || "scraper",
+      ai_model: providerName,
       analyzed_at: new Date().toISOString(),
     },
     { onConflict: "lead_id" },
