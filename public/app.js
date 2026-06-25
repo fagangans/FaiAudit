@@ -17,16 +17,58 @@ function getToken() {
   return localStorage.getItem("faiaudit_token") || "";
 }
 
-function setToken(token) {
+function getRefreshToken() {
+  return localStorage.getItem("faiaudit_refresh") || "";
+}
+
+function setToken(token, refresh) {
   localStorage.setItem("faiaudit_token", token);
+  if (refresh) localStorage.setItem("faiaudit_refresh", refresh);
 }
 
 function clearToken() {
   localStorage.removeItem("faiaudit_token");
+  localStorage.removeItem("faiaudit_refresh");
 }
 
 function authHeaders() {
   return { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
+}
+
+// Tukar refresh_token dengan access_token baru. Mengembalikan true kalau sukses.
+async function tryRefreshToken() {
+  const refresh_token = getRefreshToken();
+  if (!refresh_token) return false;
+  try {
+    const res = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    setToken(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Pembungkus fetch untuk panggilan API ber-auth: kalau token kedaluwarsa (401),
+// coba refresh sekali lalu ulangi request. Tanpa ini, access_token Supabase
+// (umur ~1 jam) habis di tengah sesi dan semua aksi gagal "Token tidak valid"
+// sampai user login ulang manual.
+async function apiFetch(url, options = {}) {
+  const opts = { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } };
+  let res = await fetch(url, opts);
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      opts.headers = { ...authHeaders(), ...(options.headers || {}) };
+      res = await fetch(url, opts);
+    }
+  }
+  return res;
 }
 
 function showView(view) {
@@ -47,7 +89,7 @@ function showAuth(message) {
 }
 
 async function loadMe() {
-  const res = await fetch("/api/me", { headers: authHeaders() });
+  const res = await apiFetch("/api/me");
   if (!res.ok) return;
   const me = await res.json();
   clientPanel.hidden = !me.is_master;
@@ -68,7 +110,7 @@ authForm.addEventListener("submit", async (event) => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Gagal masuk");
-    setToken(data.access_token);
+    setToken(data.access_token, data.refresh_token);
     showApp();
   } catch (err) {
     authError.textContent = err.message;
@@ -97,7 +139,7 @@ function cell(text) {
 }
 
 async function loadDashboard() {
-  const res = await fetch("/api/dashboard", { headers: authHeaders() });
+  const res = await apiFetch("/api/dashboard");
   if (res.status === 401 || res.status === 403) {
     clearToken();
     return showAuth("Sesi berakhir, silakan masuk kembali.");
@@ -153,9 +195,8 @@ async function loadDashboard() {
       btn.disabled = true;
       btn.textContent = "...";
       try {
-        const res = await fetch(`/api/leads/${r.lead_id}/analyze`, {
+        const res = await apiFetch(`/api/leads/${r.lead_id}/analyze`, {
           method: "POST",
-          headers: authHeaders(),
         });
         const data = await res.json();
         if (!res.ok) alert(data.error || "Gagal analisis");
@@ -176,9 +217,8 @@ async function addStaff() {
   const wa_number = prompt("Nomor WhatsApp (format 62xxxxxxxxxx, tanpa +)?");
   if (!wa_number) return;
 
-  const res = await fetch("/api/staff", {
+  const res = await apiFetch("/api/staff", {
     method: "POST",
-    headers: authHeaders(),
     body: JSON.stringify({ name, wa_number }),
   });
   const data = await res.json();
@@ -203,7 +243,7 @@ function clientCell(text) {
 }
 
 async function loadClients() {
-  const res = await fetch("/api/admin/clients", { headers: authHeaders() });
+  const res = await apiFetch("/api/admin/clients");
   const rows = await res.json();
   clientTableBody.innerHTML = "";
 
@@ -235,9 +275,8 @@ async function loadClients() {
     btn.textContent = "Hapus";
     btn.addEventListener("click", async () => {
       if (!confirm(`Hapus client "${c.name}"?`)) return;
-      const delRes = await fetch(`/api/admin/clients/${c.id}`, {
+      const delRes = await apiFetch(`/api/admin/clients/${c.id}`, {
         method: "DELETE",
-        headers: authHeaders(),
       });
       const delData = await delRes.json();
       if (!delRes.ok) return alert(delData.error || "Gagal menghapus client");
@@ -257,9 +296,8 @@ passwordForm.addEventListener("submit", async (event) => {
   const new_password = document.getElementById("newPassword").value;
 
   try {
-    const res = await fetch("/api/me/password", {
+    const res = await apiFetch("/api/me/password", {
       method: "POST",
-      headers: authHeaders(),
       body: JSON.stringify({ current_password, new_password }),
     });
     const data = await res.json();
@@ -280,9 +318,8 @@ clientForm.addEventListener("submit", async (event) => {
   const plan = document.getElementById("clientPlan").value.trim();
 
   try {
-    const res = await fetch("/api/admin/clients", {
+    const res = await apiFetch("/api/admin/clients", {
       method: "POST",
-      headers: authHeaders(),
       body: JSON.stringify({ name, email, business_name, plan }),
     });
     const data = await res.json();
