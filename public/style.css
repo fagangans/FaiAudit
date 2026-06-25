@@ -39,6 +39,51 @@ header h1 {
 }
 header h1 .mark { color: var(--text-light); font-weight: 300; }
 
+.main-nav { display: flex; gap: 4px; }
+.main-nav .nav-link {
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.main-nav .nav-link:hover { color: var(--text-light); }
+.main-nav .nav-link.active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+
+.legend-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+}
+.legend-toggle {
+  border: none;
+  background: none;
+  color: var(--navy-700);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.legend-list {
+  margin: 10px 0 2px;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 14px;
+  font-size: 12.5px;
+  color: var(--navy-900);
+}
+.legend-list dt { font-weight: 600; color: var(--navy-800); }
+.legend-list dd { margin: 0 0 6px; color: var(--text-muted); }
+
 .toolbar { display: flex; gap: 10px; }
 .toolbar button,
 .toolbar a.btn {

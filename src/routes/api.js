@@ -92,6 +92,17 @@ function normalizeMethod(value) {
   return value === "code" ? "code" : "qr"; // default QR
 }
 
+// Daftar staff/sales milik owner — dipakai halaman "Kelola Sales" terpisah dari dashboard lead.
+router.get("/staff", requireOwner, async (req, res) => {
+  const { data, error } = await supabase
+    .from("staff")
+    .select("id, name, wa_number, wa_session_status, created_at")
+    .eq("owner_id", req.ownerId)
+    .order("created_at", { ascending: false });
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
 router.post("/staff", requireOwner, async (req, res) => {
   const { name, wa_number } = req.body || {};
   const method = normalizeMethod(req.body?.method);

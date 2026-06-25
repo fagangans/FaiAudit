@@ -1,10 +1,11 @@
 const authView = document.getElementById("authView");
 const appView = document.getElementById("appView");
+const salesView = document.getElementById("salesView");
 const settingsView = document.getElementById("settingsView");
+const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
 const sheetBody = document.getElementById("sheetBody");
-const openSettingsBtn = document.getElementById("openSettings");
 const clientForm = document.getElementById("clientForm");
 const clientError = document.getElementById("clientError");
 const clientTableBody = document.getElementById("clientTableBody");
@@ -83,12 +84,26 @@ async function apiFetch(url, options = {}) {
 function showView(view) {
   authView.hidden = view !== "auth";
   appView.hidden = view !== "app";
+  salesView.hidden = view !== "sales";
   settingsView.hidden = view !== "settings";
   // Ingat halaman terakhir supaya reload (Ctrl+R) / restart server tidak
   // melempar user kembali ke dashboard. Layar auth tidak disimpan.
-  if (view === "app" || view === "settings") {
+  if (view === "app" || view === "sales" || view === "settings") {
     localStorage.setItem("faiaudit_view", view);
   }
+  document.querySelectorAll(".nav-link").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === view);
+  });
+}
+
+document.querySelectorAll(".nav-link").forEach((btn) => {
+  btn.addEventListener("click", () => goToView(btn.dataset.view));
+});
+
+async function goToView(view) {
+  if (view === "app") return showApp();
+  if (view === "sales") return showSales();
+  if (view === "settings") return showSettings();
 }
 
 async function showApp() {
@@ -96,6 +111,16 @@ async function showApp() {
   await loadMe();
   await loadDashboard();
   maybeShowIntro();
+}
+
+async function showSales() {
+  showView("sales");
+  await loadStaff();
+}
+
+async function showSettings() {
+  showView("settings");
+  await loadClients();
 }
 
 const INTRO_SEEN_KEY = "faiaudit_intro_seen";
@@ -111,6 +136,15 @@ function maybeShowIntro() {
 introClose.addEventListener("click", () => {
   introCard.hidden = true;
   localStorage.setItem(INTRO_SEEN_KEY, "1");
+});
+
+const legendToggle = document.getElementById("legendToggle");
+const legendList = document.getElementById("legendList");
+legendToggle.addEventListener("click", () => {
+  legendList.hidden = !legendList.hidden;
+  legendToggle.textContent = legendList.hidden
+    ? "ⓘ Apa arti kolom-kolom ini?"
+    : "ⓘ Sembunyikan penjelasan kolom";
 });
 
 function showAuth(message) {
@@ -341,6 +375,7 @@ function renderPairing(result, staffId) {
   if (result.connected) {
     area.innerHTML = '<p class="success">Nomor sudah terhubung ✓</p>';
     loadDashboard();
+    if (!salesView.hidden) loadStaff();
     return;
   }
 
@@ -395,6 +430,7 @@ function startPairPolling(staffId) {
       stopPairPolling();
       area.innerHTML = '<p class="success">Berhasil terhubung ✓</p>';
       loadDashboard();
+      if (!salesView.hidden) loadStaff();
       setTimeout(closeModal, 1500);
       return;
     }
@@ -484,13 +520,85 @@ function openAddSalesModal() {
 }
 
 document.getElementById("refresh").addEventListener("click", loadDashboard);
-document.getElementById("addStaff").addEventListener("click", openAddSalesModal);
+document.getElementById("addStaffSalesPage").addEventListener("click", openAddSalesModal);
+document.getElementById("logoutSales").addEventListener("click", logout);
 
-openSettingsBtn.addEventListener("click", async () => {
-  showView("settings");
-  await loadClients();
-});
-document.getElementById("closeSettings").addEventListener("click", () => showApp());
+function staffCell(text) {
+  const td = document.createElement("td");
+  td.textContent = text ?? "-";
+  return td;
+}
+
+async function loadStaff() {
+  const res = await apiFetch("/api/staff");
+  const rows = await res.json();
+  staffTableBody.innerHTML = "";
+
+  if (!res.ok) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.textContent = rows.error || "Gagal memuat data sales";
+    tr.appendChild(td);
+    staffTableBody.appendChild(tr);
+    return;
+  }
+
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.textContent = "Belum ada sales. Klik \"+ Tambah Sales\" untuk menghubungkan nomor WA.";
+    tr.appendChild(td);
+    staffTableBody.appendChild(tr);
+    return;
+  }
+
+  for (const s of rows) {
+    const tr = document.createElement("tr");
+    tr.append(
+      staffCell(s.name),
+      staffCell(s.wa_number),
+      staffCell(s.wa_session_status),
+      staffCell(new Date(s.created_at).toLocaleString("id-ID")),
+    );
+
+    const actionTd = document.createElement("td");
+
+    if (s.wa_session_status !== "connected") {
+      const reconnectBtn = document.createElement("button");
+      reconnectBtn.textContent = "Hubungkan ulang";
+      reconnectBtn.addEventListener("click", async () => {
+        reconnectBtn.disabled = true;
+        const res = await apiFetch(`/api/staff/${s.id}/pair`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || "Gagal memulai pairing");
+          reconnectBtn.disabled = false;
+          return;
+        }
+        openModal();
+        modalContent.innerHTML = '<h2>Hubungkan ulang sales</h2><div id="pairArea" class="pair-area"></div>';
+        renderPairing(data, s.id);
+      });
+      actionTd.appendChild(reconnectBtn);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "Hapus";
+    delBtn.addEventListener("click", async () => {
+      if (!confirm(`Hapus sales "${s.name}"? Sesi WA akan diputus.`)) return;
+      const res = await apiFetch(`/api/staff/${s.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || "Gagal menghapus sales");
+      loadStaff();
+    });
+    actionTd.appendChild(delBtn);
+
+    tr.appendChild(actionTd);
+    staffTableBody.appendChild(tr);
+  }
+}
 
 function clientCell(text) {
   const td = document.createElement("td");
@@ -898,12 +1006,17 @@ async function restoreSession() {
   const me = await res.json();
   clientPanel.hidden = !me.is_master;
 
-  if (localStorage.getItem("faiaudit_view") === "settings") {
+  const lastView = localStorage.getItem("faiaudit_view");
+  if (lastView === "settings") {
     showView("settings");
     await loadClients();
+  } else if (lastView === "sales") {
+    showView("sales");
+    await loadStaff();
   } else {
     showView("app");
     await loadDashboard();
+    maybeShowIntro();
   }
 }
 

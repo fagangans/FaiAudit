@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -24,15 +24,32 @@
   <div id="appView" hidden>
     <header>
       <h1><span class="mark">Fai</span>Audit</h1>
+      <nav class="main-nav">
+        <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
+        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
+      </nav>
       <div class="toolbar">
         <button id="refresh">Muat Ulang</button>
-        <button id="addStaff" class="primary">+ Tambah Sales</button>
-        <button id="openSettings">Pengaturan</button>
         <button id="logout">Keluar</button>
       </div>
     </header>
 
     <main>
+      <div class="legend-box" id="legendBox">
+        <button type="button" class="legend-toggle" id="legendToggle">ⓘ Apa arti kolom-kolom ini?</button>
+        <dl class="legend-list" id="legendList" hidden>
+          <dt>Funnel Stage</dt><dd>Tahap perjalanan lead saat ini: baru → dikontak → tertarik → negosiasi → closing/hilang. Dideteksi otomatis oleh AI dari isi chat.</dd>
+          <dt>Stage Sebelumnya</dt><dd>Tahap sebelum perubahan terakhir — untuk melihat apakah lead naik atau turun tahap.</dd>
+          <dt>Skor</dt><dd>Nilai 0-100 dari AI yang menggambarkan seberapa baik kualitas percakapan/peluang closing berdasarkan transkrip chat.</dd>
+          <dt>Risiko</dt><dd>Perkiraan heuristik (bukan probabilitas statistik) seberapa perlu lead ini segera ditindaklanjuti — gabungan dari tahap funnel, skor, dan lama tidak ada balasan.</dd>
+          <dt>Catatan Analisis</dt><dd>Ringkasan pola komunikasi & cara sales menangani keberatan, ditulis otomatis oleh AI.</dd>
+          <dt>Evaluasi</dt><dd>Rekomendasi konkret dari AI untuk sales agar performanya meningkat di percakapan ini.</dd>
+          <dt>Dianalisis</dt><dd>Waktu terakhir AI memproses chat lead ini. Klik tombol "Analisis" untuk memproses ulang kalau ada chat baru.</dd>
+          <dt>Klik nama Lead</dt><dd>Membuka Halaman Detail Lead: riwayat chat penuh, sinyal beli/keberatan, catatan manual, tag, dan ubah stage cepat.</dd>
+        </dl>
+      </div>
+
       <table id="sheet">
         <thead>
           <tr>
@@ -54,11 +71,38 @@
     </main>
   </div>
 
+  <div id="salesView" hidden>
+    <header>
+      <h1><span class="mark">Fai</span>Audit — Kelola Sales</h1>
+      <nav class="main-nav">
+        <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
+        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
+      </nav>
+      <div class="toolbar">
+        <button id="addStaffSalesPage" class="primary">+ Tambah Sales</button>
+        <button id="logoutSales">Keluar</button>
+      </div>
+    </header>
+    <main>
+      <table id="staffTable">
+        <thead>
+          <tr><th>Nama</th><th>Nomor WA</th><th>Status</th><th>Terhubung Sejak</th><th></th></tr>
+        </thead>
+        <tbody id="staffTableBody"></tbody>
+      </table>
+    </main>
+  </div>
+
   <div id="settingsView" hidden>
     <header>
       <h1><span class="mark">Fai</span>Audit — Pengaturan</h1>
+      <nav class="main-nav">
+        <button type="button" class="nav-link" data-view="app">Dashboard</button>
+        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
+        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
+      </nav>
       <div class="toolbar">
-        <button id="closeSettings">Kembali ke Dashboard</button>
         <button id="logoutSettings">Keluar</button>
       </div>
     </header>
@@ -120,6 +164,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
