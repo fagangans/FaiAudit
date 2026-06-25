@@ -30,6 +30,7 @@ const filterSearch = document.getElementById("filterSearch");
 const filterStage = document.getElementById("filterStage");
 const filterRisk = document.getElementById("filterRisk");
 const exportCsvBtn = document.getElementById("exportCsv");
+const downloadDailyPdfBtn = document.getElementById("downloadDailyPdf");
 const notifyForm = document.getElementById("notifyForm");
 const notifyNumberInput = document.getElementById("notifyNumber");
 const notifyError = document.getElementById("notifyError");
@@ -393,6 +394,42 @@ filterSearch.addEventListener("input", applyDashboardFilters);
 filterStage.addEventListener("change", applyDashboardFilters);
 filterRisk.addEventListener("change", applyDashboardFilters);
 
+// Endpoint PDF butuh header Authorization (Bearer token) sehingga tidak
+// bisa dipakai langsung lewat <a href>; fetch sebagai blob dulu lalu trigger
+// download lewat <a> sementara, sama seperti pola export CSV.
+async function downloadAuthedFile(url, triggerBtn) {
+  const original = triggerBtn?.textContent;
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = "Membuat PDF…";
+  }
+  try {
+    const res = await apiFetch(url);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Gagal membuat PDF");
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = /filename="([^"]+)"/.exec(disposition);
+    const filename = match ? match[1] : "FaiAudit.pdf";
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = original;
+    }
+  }
+}
+
 function csvEscape(value) {
   const s = String(value ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -432,6 +469,8 @@ exportCsvBtn.addEventListener("click", () => {
   a.remove();
   URL.revokeObjectURL(url);
 });
+
+downloadDailyPdfBtn.addEventListener("click", () => downloadAuthedFile("/api/reports/daily/pdf", downloadDailyPdfBtn));
 
 async function loadDashboard() {
   const res = await apiFetch("/api/dashboard");
@@ -1170,6 +1209,13 @@ function renderLeadDetail(lead) {
   sub.className = "hint";
   sub.textContent = `Sales: ${lead.staff_name || "-"} · WA: ${lead.wa_jid || "-"} · Status: ${lead.wa_status || "-"}`;
   leadModalContent.appendChild(sub);
+
+  const pdfBtn = document.createElement("button");
+  pdfBtn.type = "button";
+  pdfBtn.className = "pdf-download-btn";
+  pdfBtn.textContent = "⬇ Download PDF Lead";
+  pdfBtn.addEventListener("click", () => downloadAuthedFile(`/api/leads/${lead.lead_id}/pdf`, pdfBtn));
+  leadModalContent.appendChild(pdfBtn);
 
   // --- AI Intelligence Card ---
   const aiCard = document.createElement("div");

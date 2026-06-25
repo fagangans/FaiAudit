@@ -4,6 +4,8 @@ import { supabase, supabaseAuth } from "../supabase.js";
 import { startStaffSession, stopStaffSession, getPairingState } from "../whatsapp/connector.js";
 import { analyzeLead, computeLeadRisk, FUNNEL_STAGES } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
+import { buildLeadPdfBuffer, buildDailyReportPdfBuffer } from "../reports/pdfBuilder.js";
+import { buildDailyReportData } from "../reports/dailyReportData.js";
 
 export const router = express.Router();
 
@@ -249,10 +251,9 @@ router.get("/dashboard", requireOwner, async (req, res) => {
   res.json(rows);
 });
 
-// Halaman Detail Lead: info kontak, AI intelligence (skor, buying
-// signal/objection, risiko heuristik), catatan manual owner, tag, dan
-// timeline chat lengkap untuk satu lead.
-router.get("/leads/:id", requireOwner, async (req, res) => {
+// Dipakai bersama oleh GET /leads/:id (JSON) dan GET /leads/:id/pdf (download)
+// supaya bentuk data lead detail tidak terduplikasi di dua tempat.
+async function loadLeadDetail(leadId, ownerId) {
   const { data: lead, error } = await supabase
     .from("leads")
     .select(
@@ -260,11 +261,11 @@ router.get("/leads/:id", requireOwner, async (req, res) => {
        staff:staff_id ( id, name, wa_number, wa_session_status ),
        lead_audits ( funnel_stage, previous_stage, score, analysis_notes, evaluation, analyzed_at, buying_signals, objections )`,
     )
-    .eq("id", req.params.id)
-    .eq("owner_id", req.ownerId)
+    .eq("id", leadId)
+    .eq("owner_id", ownerId)
     .maybeSingle();
-  if (error) return res.status(400).json({ error: error.message });
-  if (!lead) return res.status(404).json({ error: "Lead tidak ditemukan" });
+  if (error) return { error: error.message };
+  if (!lead) return { notFound: true };
 
   const { data: messages, error: msgError } = await supabase
     .from("messages")
@@ -272,10 +273,10 @@ router.get("/leads/:id", requireOwner, async (req, res) => {
     .eq("lead_id", lead.id)
     .order("sent_at", { ascending: true })
     .limit(500);
-  if (msgError) return res.status(400).json({ error: msgError.message });
+  if (msgError) return { error: msgError.message };
 
   const funnel_stage = lead.lead_audits?.funnel_stage || "new";
-  res.json({
+  return {
     lead_id: lead.id,
     lead_name: lead.name || lead.wa_jid,
     wa_jid: lead.wa_jid,
@@ -294,7 +295,50 @@ router.get("/leads/:id", requireOwner, async (req, res) => {
     analyzed_at: lead.lead_audits?.analyzed_at || null,
     risk: computeLeadRisk({ funnel_stage, score: lead.lead_audits?.score, last_message_at: lead.last_message_at }),
     messages: messages || [],
-  });
+  };
+}
+
+// Halaman Detail Lead: info kontak, AI intelligence (skor, buying
+// signal/objection, risiko heuristik), catatan manual owner, tag, dan
+// timeline chat lengkap untuk satu lead.
+router.get("/leads/:id", requireOwner, async (req, res) => {
+  const detail = await loadLeadDetail(req.params.id, req.ownerId);
+  if (detail.error) return res.status(400).json({ error: detail.error });
+  if (detail.notFound) return res.status(404).json({ error: "Lead tidak ditemukan" });
+  res.json(detail);
+});
+
+// Download laporan PDF lengkap satu lead (info, ringkasan AI, evaluasi,
+// sinyal beli/keberatan, catatan manual, dan transkrip chat penuh) — dipakai
+// owner untuk dokumentasi/arsip di luar dashboard.
+router.get("/leads/:id/pdf", requireOwner, async (req, res) => {
+  const detail = await loadLeadDetail(req.params.id, req.ownerId);
+  if (detail.error) return res.status(400).json({ error: detail.error });
+  if (detail.notFound) return res.status(404).json({ error: "Lead tidak ditemukan" });
+
+  try {
+    const buffer = await buildLeadPdfBuffer(detail);
+    const safeName = (detail.lead_name || "lead").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "lead";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-${safeName}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal membuat PDF: " + err.message });
+  }
+});
+
+// Download manual laporan harian (snapshot funnel/risiko + lead yang ada
+// chat kemarin) — fungsi data yang sama dipakai scheduler WA pagi otomatis.
+router.get("/reports/daily/pdf", requireOwner, async (req, res) => {
+  try {
+    const data = await buildDailyReportData(req.ownerId, req.owner.business_name);
+    const buffer = await buildDailyReportPdfBuffer(data);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-Harian-${data.dateLabel}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal membuat laporan harian: " + err.message });
+  }
 });
 
 // Catatan manual & tag owner — terpisah dari analysis_notes/evaluation AI

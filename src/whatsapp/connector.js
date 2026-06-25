@@ -287,6 +287,23 @@ export function stopStaffSession(staffId) {
   }
 }
 
+// Cari satu sock staff milik owner yang sedang connected — dipakai bersama
+// oleh pengiriman teks (reminder) dan dokumen (laporan harian) ke nomor
+// pribadi owner, supaya tidak ada duplikasi pencarian sesi.
+async function findConnectedOwnerSock(ownerId) {
+  const { data: staffRows, error } = await supabase
+    .from("staff")
+    .select("id")
+    .eq("owner_id", ownerId)
+    .eq("wa_session_status", "connected");
+  if (error || !staffRows?.length) return null;
+  for (const staff of staffRows) {
+    const sock = activeSessions.get(staff.id);
+    if (sock) return { sock, staffId: staff.id };
+  }
+  return null;
+}
+
 // Satu-satunya pengecualian terhadap "audit-only, tidak pernah balas":
 // reminder lead berisiko tinggi dikirim ke NOMOR PRIBADI OWNER SENDIRI
 // (bukan ke lead), lewat sesi staff milik owner itu yang sedang terhubung
@@ -294,25 +311,38 @@ export function stopStaffSession(staffId) {
 // connected, reminder otomatis dilewati (dicoba lagi di siklus berikutnya).
 export async function sendOwnerNotification(ownerId, notifyWaNumber, text) {
   if (!notifyWaNumber) return false;
-  const { data: staffRows, error } = await supabase
-    .from("staff")
-    .select("id")
-    .eq("owner_id", ownerId)
-    .eq("wa_session_status", "connected");
-  if (error || !staffRows?.length) return false;
-
+  const found = await findConnectedOwnerSock(ownerId);
+  if (!found) return false;
   const jid = `${notifyWaNumber}@s.whatsapp.net`;
-  for (const staff of staffRows) {
-    const sock = activeSessions.get(staff.id);
-    if (!sock) continue;
-    try {
-      await sock.sendMessage(jid, { text });
-      return true;
-    } catch (err) {
-      logger.error({ ownerId, staffId: staff.id, err: err.message }, "gagal mengirim reminder WA ke owner");
-    }
+  try {
+    await found.sock.sendMessage(jid, { text });
+    return true;
+  } catch (err) {
+    logger.error({ ownerId, staffId: found.staffId, err: err.message }, "gagal mengirim reminder WA ke owner");
+    return false;
   }
-  return false;
+}
+
+// Sama seperti sendOwnerNotification tapi untuk lampiran dokumen (laporan
+// harian PDF) — tetap hanya ke nomor pribadi owner, lewat sesi yang sudah
+// terhubung, tidak pernah membuka sesi baru.
+export async function sendOwnerDocument(ownerId, notifyWaNumber, buffer, fileName, caption) {
+  if (!notifyWaNumber) return false;
+  const found = await findConnectedOwnerSock(ownerId);
+  if (!found) return false;
+  const jid = `${notifyWaNumber}@s.whatsapp.net`;
+  try {
+    await found.sock.sendMessage(jid, {
+      document: buffer,
+      fileName,
+      mimetype: "application/pdf",
+      caption,
+    });
+    return true;
+  } catch (err) {
+    logger.error({ ownerId, staffId: found.staffId, err: err.message }, "gagal mengirim laporan PDF WA ke owner");
+    return false;
+  }
 }
 
 // Dipanggil sekali saat server start: sambungkan kembali semua staff yang

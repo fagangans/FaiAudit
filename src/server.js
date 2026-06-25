@@ -11,6 +11,7 @@ import { bootstrapMasterAccount } from "./bootstrapMaster.js";
 import { reconnectAllStaffSessions } from "./whatsapp/connector.js";
 import { startAutoAnalyzeScheduler } from "./ai/scheduler.js";
 import { startRiskReminderScheduler } from "./notify/reminderScheduler.js";
+import { startDailyReportScheduler } from "./notify/dailyReportScheduler.js";
 import { logger } from "./logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +62,7 @@ bootstrapMasterAccount().finally(() => {
     reconnectAllStaffSessions();
     startAutoAnalyzeScheduler();
     startRiskReminderScheduler();
+    startDailyReportScheduler();
   });
 });
 
