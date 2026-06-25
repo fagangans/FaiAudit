@@ -24,5 +24,6 @@ export async function requireOwner(req, res, next) {
 
   req.ownerId = owner.id;
   req.owner = owner;
+  req.user = userData.user;
   next();
 }

@@ -149,6 +149,7 @@ tr:hover td { background: var(--surface-alt); }
 }
 .auth-actions button:hover { background: var(--navy-700); }
 .error { color: var(--danger); font-size: 13px; min-height: 16px; margin-top: 10px; }
+.success { color: #1c7a4d; font-size: 13px; margin-top: 10px; }
 
 .settings-panel {
   max-width: 720px;

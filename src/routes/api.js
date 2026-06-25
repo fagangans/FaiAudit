@@ -1,10 +1,23 @@
 import express from "express";
-import { supabase } from "../supabase.js";
+import rateLimit from "express-rate-limit";
+import { supabase, supabaseAuth } from "../supabase.js";
 import { startStaffSession, stopStaffSession } from "../whatsapp/connector.js";
 import { analyzeLead } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
 
 export const router = express.Router();
+
+// Setiap panggilan AI provider berbayar per-token — batasi supaya klik
+// berulang atau bug di frontend tidak membengkakkan tagihan OpenRouter.
+// analyzeLead() sendiri juga skip kalau tidak ada chat baru, ini lapisan
+// kedua untuk membatasi laju permintaan ke endpoint itu sendiri.
+const analyzeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ownerId || req.ip,
+});
 
 const WA_NUMBER_RE = /^[1-9][0-9]{7,14}$/; // format internasional tanpa "+", mis. 62xxxxxxxxxx
 
@@ -14,6 +27,34 @@ router.get("/me", requireOwner, (req, res) => {
     business_name: req.owner.business_name,
     is_master: req.owner.is_master,
   });
+});
+
+// Ganti password sendiri (master & client) — wajib ada karena password
+// dibuat otomatis dan dilihat-sekali; tanpa ini satu-satunya jalan ganti
+// password adalah lewat Supabase dashboard manual.
+router.post("/me/password", requireOwner, async (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (typeof current_password !== "string" || typeof new_password !== "string") {
+    return res.status(400).json({ error: "current_password dan new_password wajib diisi" });
+  }
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: "Password baru minimal 8 karakter" });
+  }
+
+  // Verifikasi password lama dulu (re-auth) sebelum mengizinkan ganti password,
+  // supaya token yang dicuri/disesi-tinggalkan tidak cukup untuk ambil alih akun.
+  const { error: verifyError } = await supabaseAuth.auth.signInWithPassword({
+    email: req.user.email,
+    password: current_password,
+  });
+  if (verifyError) return res.status(401).json({ error: "Password saat ini salah" });
+
+  const { error: updateError } = await supabase.auth.admin.updateUserById(req.user.id, {
+    password: new_password,
+  });
+  if (updateError) return res.status(400).json({ error: updateError.message });
+
+  res.json({ ok: true });
 });
 
 router.post("/staff", requireOwner, async (req, res) => {
@@ -93,7 +134,7 @@ router.get("/dashboard", requireOwner, async (req, res) => {
   res.json(rows);
 });
 
-router.post("/leads/:id/analyze", requireOwner, async (req, res) => {
+router.post("/leads/:id/analyze", requireOwner, analyzeLimiter, async (req, res) => {
   const { data: lead, error: findError } = await supabase
     .from("leads")
     .select("id")
@@ -107,5 +148,25 @@ router.post("/leads/:id/analyze", requireOwner, async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Sambungkan ulang staff yang creds-nya sudah ada (tidak perlu pairing code
+// baru) — dipakai kalau auto-retry di connector.js sudah mencapai batas
+// maksimum dan berhenti otomatis (lihat MAX_ATTEMPTS di connector.js).
+router.post("/staff/:id/reconnect", requireOwner, async (req, res) => {
+  const { data: staff, error: findError } = await supabase
+    .from("staff")
+    .select("id, owner_id")
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .single();
+  if (findError || !staff) return res.status(404).json({ error: "Staff tidak ditemukan" });
+
+  try {
+    await startStaffSession({ staffId: staff.id, ownerId: staff.owner_id, phoneNumber: null });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Gagal menyambungkan ulang: ${err.message}` });
   }
 });

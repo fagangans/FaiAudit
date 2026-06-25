@@ -8,6 +8,10 @@ const openSettingsBtn = document.getElementById("openSettings");
 const clientForm = document.getElementById("clientForm");
 const clientError = document.getElementById("clientError");
 const clientTableBody = document.getElementById("clientTableBody");
+const passwordForm = document.getElementById("passwordForm");
+const passwordError = document.getElementById("passwordError");
+const passwordSuccess = document.getElementById("passwordSuccess");
+const clientPanel = document.getElementById("clientPanel");
 
 function getToken() {
   return localStorage.getItem("faiaudit_token") || "";
@@ -46,7 +50,7 @@ async function loadMe() {
   const res = await fetch("/api/me", { headers: authHeaders() });
   if (!res.ok) return;
   const me = await res.json();
-  openSettingsBtn.hidden = !me.is_master;
+  clientPanel.hidden = !me.is_master;
 }
 
 authForm.addEventListener("submit", async (event) => {
@@ -244,6 +248,28 @@ async function loadClients() {
     clientTableBody.appendChild(tr);
   }
 }
+
+passwordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  passwordError.textContent = "";
+  passwordSuccess.hidden = true;
+  const current_password = document.getElementById("currentPassword").value;
+  const new_password = document.getElementById("newPassword").value;
+
+  try {
+    const res = await fetch("/api/me/password", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ current_password, new_password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Gagal mengganti password");
+    passwordForm.reset();
+    passwordSuccess.hidden = false;
+  } catch (err) {
+    passwordError.textContent = err.message;
+  }
+});
 
 clientForm.addEventListener("submit", async (event) => {
   event.preventDefault();

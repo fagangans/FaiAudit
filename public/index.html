@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -27,7 +27,7 @@
       <div class="toolbar">
         <button id="refresh">Muat Ulang</button>
         <button id="addStaff" class="primary">+ Tambah Sales</button>
-        <button id="openSettings" hidden>Pengaturan</button>
+        <button id="openSettings">Pengaturan</button>
         <button id="logout">Keluar</button>
       </div>
     </header>
@@ -63,6 +63,17 @@
     </header>
     <main>
       <div class="settings-panel">
+        <h2>Ganti Password</h2>
+        <form id="passwordForm">
+          <input id="currentPassword" type="password" placeholder="Password saat ini" autocomplete="current-password" required />
+          <input id="newPassword" type="password" placeholder="Password baru (min. 8 karakter)" autocomplete="new-password" required minlength="8" />
+          <button type="submit">Ganti Password</button>
+        </form>
+        <p id="passwordError" class="error"></p>
+        <p id="passwordSuccess" class="success" hidden>Password berhasil diganti.</p>
+      </div>
+
+      <div class="settings-panel" id="clientPanel">
         <h2>Daftarkan Client Baru</h2>
         <form id="clientForm">
           <input id="clientName" placeholder="Nama client/bisnis" required />
@@ -84,6 +95,6 @@
     </main>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

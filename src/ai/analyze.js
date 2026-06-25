@@ -48,13 +48,27 @@ function parseResult(raw) {
   return parsed;
 }
 
-export async function analyzeLead(leadId) {
+export async function analyzeLead(leadId, { force = false } = {}) {
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("id, lead_audits(funnel_stage)")
+    .select("id, last_message_at, lead_audits(funnel_stage, analyzed_at, score, analysis_notes, evaluation)")
     .eq("id", leadId)
     .single();
   if (leadError) throw leadError;
+
+  // Lewati pemanggilan AI (biaya per-token) kalau tidak ada chat baru sejak
+  // analisis terakhir — baik klik manual berulang maupun scheduler otomatis
+  // tidak boleh membayar ulang untuk transkrip yang sama.
+  const audit = lead.lead_audits;
+  if (!force && audit?.analyzed_at && lead.last_message_at && audit.analyzed_at >= lead.last_message_at) {
+    return {
+      funnel_stage: audit.funnel_stage,
+      score: audit.score,
+      analysis_notes: audit.analysis_notes,
+      evaluation: audit.evaluation,
+      skipped: true,
+    };
+  }
 
   const { data: history, error: historyError } = await supabase
     .from("messages")

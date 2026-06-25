@@ -8,6 +8,9 @@ import { router as apiRouter } from "./routes/api.js";
 import { router as authRouter } from "./routes/auth.js";
 import { router as adminRouter } from "./routes/admin.js";
 import { bootstrapMasterAccount } from "./bootstrapMaster.js";
+import { reconnectAllStaffSessions } from "./whatsapp/connector.js";
+import { startAutoAnalyzeScheduler } from "./ai/scheduler.js";
+import { logger } from "./logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +27,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+app.get("/api/health", (req, res) => res.json({ ok: true, uptime: process.uptime() }));
+
 app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api", apiRouter);
@@ -32,6 +37,15 @@ const port = process.env.PORT || 3000;
 
 bootstrapMasterAccount().finally(() => {
   app.listen(port, () => {
-    console.log(`[FaiAudit] dashboard berjalan di http://localhost:${port}`);
+    logger.info({ port }, "FaiAudit dashboard berjalan");
+    // Sambungkan ulang sesi WA staff yang sudah pernah pairing — tanpa ini,
+    // setiap restart server diam-diam menghentikan audit sampai staff dihapus
+    // dan ditambahkan ulang manual.
+    reconnectAllStaffSessions();
+    startAutoAnalyzeScheduler();
   });
+});
+
+process.on("unhandledRejection", (err) => {
+  logger.error({ err: err?.message || err }, "unhandled rejection");
 });

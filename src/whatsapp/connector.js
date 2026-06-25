@@ -4,6 +4,7 @@ import makeWASocket, {
   DisconnectReason,
 } from "@whiskeysockets/baileys";
 import { supabase } from "../supabase.js";
+import { logger } from "../logger.js";
 
 /**
  * Passive WhatsApp audit logger.
@@ -13,6 +14,17 @@ import { supabase } from "../supabase.js";
  */
 
 const activeSessions = new Map(); // staffId -> socket
+const retryState = new Map(); // staffId -> { attempt, timer }
+
+const BASE_DELAY_MS = 2000;
+const MAX_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_ATTEMPTS = 10; // after this, stop auto-retrying and mark as failed
+
+function clearRetry(staffId) {
+  const state = retryState.get(staffId);
+  if (state?.timer) clearTimeout(state.timer);
+  retryState.delete(staffId);
+}
 
 async function upsertLead(staffId, ownerId, jid, name) {
   const { data, error } = await supabase
@@ -35,7 +47,7 @@ async function logMessage(leadId, direction, body, waMessageId, sentAt) {
     wa_message_id: waMessageId,
     sent_at: sentAt,
   });
-  if (error) console.error("[FaiAudit] gagal menyimpan pesan:", error.message);
+  if (error) logger.error({ err: error.message, leadId }, "gagal menyimpan pesan");
 }
 
 function extractText(message) {
@@ -49,6 +61,7 @@ function extractText(message) {
 }
 
 export async function startStaffSession({ staffId, ownerId, phoneNumber, onPairingCode, onStatus }) {
+  clearRetry(staffId);
   const sessionDir = path.resolve(process.cwd(), "wa-sessions", staffId);
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
@@ -68,20 +81,48 @@ export async function startStaffSession({ staffId, ownerId, phoneNumber, onPairi
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === "open") {
+      clearRetry(staffId);
       onStatus?.("connected");
       await supabase.from("staff").update({ wa_session_status: "connected" }).eq("id", staffId);
     }
     if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      onStatus?.(shouldReconnect ? "reconnecting" : "disconnected");
-      await supabase
-        .from("staff")
-        .update({ wa_session_status: shouldReconnect ? "reconnecting" : "disconnected" })
-        .eq("id", staffId);
-      if (shouldReconnect) {
-        startStaffSession({ staffId, ownerId, phoneNumber: null, onPairingCode, onStatus });
+      activeSessions.delete(staffId);
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+
+      if (loggedOut) {
+        // Akun di-unlink dari WhatsApp (pairing dicabut manual) — jangan retry,
+        // perlu pairing ulang oleh master/client lewat dashboard.
+        clearRetry(staffId);
+        onStatus?.("disconnected");
+        await supabase.from("staff").update({ wa_session_status: "disconnected" }).eq("id", staffId);
+        logger.warn({ staffId }, "sesi WA logged out, perlu pairing ulang");
+        return;
       }
+
+      const prev = retryState.get(staffId) || { attempt: 0 };
+      const attempt = prev.attempt + 1;
+      if (attempt > MAX_ATTEMPTS) {
+        clearRetry(staffId);
+        onStatus?.("disconnected");
+        await supabase.from("staff").update({ wa_session_status: "disconnected" }).eq("id", staffId);
+        logger.error({ staffId, attempt }, "sesi WA gagal reconnect setelah batas percobaan, berhenti otomatis");
+        return;
+      }
+
+      // Exponential backoff dengan batas atas, supaya tidak membombardir WhatsApp
+      // dan memicu rate-limit/blokir nomor saat koneksi tidak stabil.
+      const delay = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+      onStatus?.("reconnecting");
+      await supabase.from("staff").update({ wa_session_status: "reconnecting" }).eq("id", staffId);
+      logger.warn({ staffId, attempt, delayMs: delay }, "sesi WA putus, reconnect terjadwal");
+
+      const timer = setTimeout(() => {
+        startStaffSession({ staffId, ownerId, phoneNumber: null, onPairingCode, onStatus }).catch((err) =>
+          logger.error({ staffId, err: err.message }, "gagal reconnect sesi WA"),
+        );
+      }, delay);
+      retryState.set(staffId, { attempt, timer });
     }
   });
 
@@ -103,7 +144,7 @@ export async function startStaffSession({ staffId, ownerId, phoneNumber, onPairi
         const sentAt = new Date((msg.messageTimestamp || Date.now() / 1000) * 1000).toISOString();
         await logMessage(leadId, direction, text, msg.key.id, sentAt);
       } catch (err) {
-        console.error("[FaiAudit] gagal mencatat pesan audit:", err.message);
+        logger.error({ staffId, err: err.message }, "gagal mencatat pesan audit");
       }
     }
   });
@@ -112,9 +153,32 @@ export async function startStaffSession({ staffId, ownerId, phoneNumber, onPairi
 }
 
 export function stopStaffSession(staffId) {
+  clearRetry(staffId);
   const sock = activeSessions.get(staffId);
   if (sock) {
     sock.end(undefined);
     activeSessions.delete(staffId);
+  }
+}
+
+// Dipanggil sekali saat server start: sambungkan kembali semua staff yang
+// sudah pernah pairing (creds tersimpan di wa-sessions/), supaya restart
+// server/VPS tidak diam-diam menghentikan audit tanpa staff/owner sadar.
+export async function reconnectAllStaffSessions() {
+  const { data: staffRows, error } = await supabase
+    .from("staff")
+    .select("id, owner_id, wa_session_status")
+    .neq("wa_session_status", "disconnected");
+  if (error) {
+    logger.error({ err: error.message }, "gagal memuat daftar staff untuk reconnect");
+    return;
+  }
+  if (!staffRows?.length) return;
+
+  logger.info({ count: staffRows.length }, "menyambungkan ulang sesi WA staff setelah restart");
+  for (const staff of staffRows) {
+    startStaffSession({ staffId: staff.id, ownerId: staff.owner_id, phoneNumber: null }).catch((err) =>
+      logger.error({ staffId: staff.id, err: err.message }, "gagal menyambungkan ulang sesi WA saat boot"),
+    );
   }
 }
