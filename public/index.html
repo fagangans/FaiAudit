@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -30,8 +30,15 @@
         <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
       </nav>
       <div class="toolbar">
+        <button id="refresh">Muat Ulang</button>
+        <button id="logout">Keluar</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="dashboard-topbar">
         <div class="legend-wrap">
-          <button type="button" class="legend-toggle" id="legendToggle" aria-label="Penjelasan kolom">ⓘ</button>
+          <button type="button" class="legend-toggle" id="legendToggle" aria-label="Penjelasan kolom" aria-expanded="false">ⓘ Apa arti kolom ini?</button>
           <dl class="legend-list" id="legendList" hidden>
             <dt>Funnel Stage</dt><dd>Tahap lead saat ini (baru → kontak → tertarik → negosiasi → closing/hilang), dideteksi AI.</dd>
             <dt>Stage Sebelumnya</dt><dd>Tahap sebelum perubahan terakhir.</dd>
@@ -43,12 +50,8 @@
             <dt>Klik nama Lead</dt><dd>Buka detail: chat, sinyal beli, catatan, tag, ubah stage.</dd>
           </dl>
         </div>
-        <button id="refresh">Muat Ulang</button>
-        <button id="logout">Keluar</button>
       </div>
-    </header>
 
-    <main>
       <div class="risk-banner" id="riskBanner" hidden></div>
 
       <table id="sheet">
@@ -167,6 +170,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

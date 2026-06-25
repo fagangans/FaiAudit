@@ -141,13 +141,16 @@ introClose.addEventListener("click", () => {
 
 const legendToggle = document.getElementById("legendToggle");
 const legendList = document.getElementById("legendList");
-legendToggle.addEventListener("click", () => {
+legendToggle.addEventListener("click", (e) => {
+  e.stopPropagation();
   legendList.hidden = !legendList.hidden;
+  legendToggle.setAttribute("aria-expanded", String(!legendList.hidden));
 });
 document.addEventListener("click", (e) => {
   if (legendList.hidden) return;
-  if (e.target === legendToggle || legendList.contains(e.target)) return;
+  if (legendList.contains(e.target)) return;
   legendList.hidden = true;
+  legendToggle.setAttribute("aria-expanded", "false");
 });
 
 function showAuth(message) {
