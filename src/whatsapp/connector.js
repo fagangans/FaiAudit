@@ -1,6 +1,8 @@
 import path from "node:path";
 import makeWASocket, {
   useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  Browsers,
   DisconnectReason,
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
@@ -14,12 +16,38 @@ import { logger } from "../logger.js";
  * them so the AI analysis module can audit conversations later.
  */
 
+const waLogger = logger.child({ module: "baileys" });
+waLogger.level = process.env.BAILEYS_LOG_LEVEL || "warn";
+
+// Versi protokol WhatsApp Web ikut di-bundle di rilis Baileys dan jadi basi
+// setiap kali WhatsApp memperbarui server mereka (rutin, di luar kendali
+// kita). Soket yang dibuat dengan versi basi langsung ditolak server WA —
+// koneksi ditutup SEBELUM QR/pairing code sempat terkirim. Inilah sumber
+// "Connection Closed" & QR yang tak pernah muncul. Ambil versi terbaru sekali
+// per proses lalu cache, supaya tidak fetch berulang tapi selalu valid.
+let cachedVersion = null;
+async function getWaVersion() {
+  if (cachedVersion) return cachedVersion;
+  try {
+    const { version } = await fetchLatestBaileysVersion();
+    cachedVersion = version;
+  } catch (err) {
+    logger.warn({ err: err.message }, "gagal mengambil versi WA Web terbaru, pakai default Baileys");
+    cachedVersion = undefined;
+  }
+  return cachedVersion;
+}
+
 const activeSessions = new Map(); // staffId -> socket
 const retryState = new Map(); // staffId -> { attempt, timer }
 // Artefak pairing terbaru per staff supaya endpoint /pair-status bisa
 // mengirim QR yang ter-refresh & status terkini ke dashboard tanpa membuka
 // soket baru tiap polling.
 const pairingState = new Map(); // staffId -> { method, qr, code, status }
+// Parameter sesi asli (method, callback) per staff — dipakai ulang saat
+// auto-reconnect supaya method "code" & callback onQR/onPairingCode tidak
+// hilang begitu retry pertama terjadi (lihat scheduleReconnect).
+const sessionParams = new Map(); // staffId -> { method, phoneNumber, onPairingCode, onQR, onStatus }
 
 export function getPairingState(staffId) {
   return pairingState.get(staffId) || null;
@@ -33,6 +61,19 @@ function clearRetry(staffId) {
   const state = retryState.get(staffId);
   if (state?.timer) clearTimeout(state.timer);
   retryState.delete(staffId);
+}
+
+// Pesan mentah dari Baileys (mis. "Connection Closed") tidak informatif buat
+// user dashboard. Terjemahkan ke bahasa yang jelas + actionable.
+function friendlyConnectError(err) {
+  const msg = String(err?.message || err || "");
+  if (/connection closed/i.test(msg)) {
+    return "Koneksi ke WhatsApp terputus saat memulai pairing. Sistem akan mencoba lagi otomatis — kalau masih gagal setelah beberapa kali, cek koneksi internet server atau coba ulang beberapa saat lagi.";
+  }
+  if (/timed ?out/i.test(msg)) {
+    return "Permintaan ke WhatsApp tidak mendapat balasan (timeout). Coba ulangi pairing.";
+  }
+  return msg || "Gagal memulai pairing WhatsApp.";
 }
 
 async function upsertLead(staffId, ownerId, jid, name) {
@@ -79,12 +120,18 @@ export async function startStaffSession({
   onStatus,
 }) {
   clearRetry(staffId);
+  sessionParams.set(staffId, { method, phoneNumber, onPairingCode, onQR, onStatus });
+
   const sessionDir = path.resolve(process.cwd(), "wa-sessions", staffId);
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+  const version = await getWaVersion();
 
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    version,
+    browser: Browsers.ubuntu("Chrome"),
+    logger: waLogger,
   });
 
   activeSessions.set(staffId, sock);
@@ -94,9 +141,15 @@ export async function startStaffSession({
   // Metode "qr" (default): jangan minta code, biarkan Baileys memancarkan
   // string QR lewat connection.update di bawah, lalu kita render jadi gambar.
   if (!sock.authState.creds.registered && method === "code" && phoneNumber) {
-    const code = await sock.requestPairingCode(phoneNumber.trim());
-    pairingState.set(staffId, { method: "code", code, qr: null, status: "pairing" });
-    onPairingCode?.(code);
+    try {
+      const code = await sock.requestPairingCode(phoneNumber.trim());
+      pairingState.set(staffId, { method: "code", code, qr: null, status: "pairing" });
+      onPairingCode?.(code);
+    } catch (err) {
+      logger.error({ staffId, err: err.message }, "gagal meminta pairing code");
+      pairingState.set(staffId, { method: "code", code: null, qr: null, status: "pairing" });
+      throw new Error(friendlyConnectError(err));
+    }
   }
 
   sock.ev.on("connection.update", async (update) => {
@@ -125,6 +178,14 @@ export async function startStaffSession({
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
 
+      // Selalu catat alasan putus — sebelumnya hanya dicatat di cabang
+      // loggedOut/max-attempts, jadi "Connection Closed" yang dialami user
+      // tidak pernah terlihat di pm2 logs untuk didiagnosis.
+      logger.warn(
+        { staffId, statusCode, err: lastDisconnect?.error?.message },
+        "sesi WA terputus",
+      );
+
       if (loggedOut) {
         // Akun di-unlink dari WhatsApp (pairing dicabut manual) — jangan retry,
         // perlu pairing ulang oleh master/client lewat dashboard.
@@ -152,10 +213,22 @@ export async function startStaffSession({
       await supabase.from("staff").update({ wa_session_status: "reconnecting" }).eq("id", staffId);
       logger.warn({ staffId, attempt, delayMs: delay }, "sesi WA putus, reconnect terjadwal");
 
+      // Pakai parameter sesi ASLI yang disimpan saat sesi ini dimulai, bukan
+      // hanya sebagian field — sebelumnya `method` & `onQR` ikut hilang di
+      // sini, jadi reconnect pertama kali diam-diam balik ke metode "qr" dan
+      // berhenti memanggil onQR (artefak QR di pairingState tetap ke-update,
+      // tapi konsistensi parameter tetap penting untuk method "code").
+      const original = sessionParams.get(staffId) || {};
       const timer = setTimeout(() => {
-        startStaffSession({ staffId, ownerId, phoneNumber: null, onPairingCode, onStatus }).catch((err) =>
-          logger.error({ staffId, err: err.message }, "gagal reconnect sesi WA"),
-        );
+        startStaffSession({
+          staffId,
+          ownerId,
+          phoneNumber: null,
+          method: original.method,
+          onPairingCode: original.onPairingCode,
+          onQR: original.onQR,
+          onStatus: original.onStatus,
+        }).catch((err) => logger.error({ staffId, err: err.message }, "gagal reconnect sesi WA"));
       }, delay);
       retryState.set(staffId, { attempt, timer });
     }
