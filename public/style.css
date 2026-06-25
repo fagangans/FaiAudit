@@ -276,3 +276,34 @@ tr:hover td { background: var(--surface-alt); }
   white-space: nowrap;
 }
 .copy-row button:hover { background: var(--accent-soft); }
+
+/* ---- Kartu info fitur (pojok kiri bawah) ---- */
+.intro-card {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  width: 280px;
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 10px 30px rgba(10, 26, 48, 0.25);
+  border-left: 3px solid var(--accent);
+  z-index: 50;
+}
+.intro-card[hidden] { display: none; }
+.intro-card h3 { margin: 0 0 8px; font-size: 14px; color: var(--navy-800); }
+.intro-card ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--navy-900); }
+.intro-card li { margin-bottom: 6px; }
+.intro-card li:last-child { margin-bottom: 0; }
+.intro-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.intro-close:hover { color: var(--navy-800); }

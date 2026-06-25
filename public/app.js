@@ -15,6 +15,8 @@ const clientPanel = document.getElementById("clientPanel");
 const modalOverlay = document.getElementById("modalOverlay");
 const modalContent = document.getElementById("modalContent");
 const modalClose = document.getElementById("modalClose");
+const introCard = document.getElementById("introCard");
+const introClose = document.getElementById("introClose");
 
 function getToken() {
   return localStorage.getItem("faiaudit_token") || "";
@@ -90,7 +92,23 @@ async function showApp() {
   showView("app");
   await loadMe();
   await loadDashboard();
+  maybeShowIntro();
 }
+
+const INTRO_SEEN_KEY = "faiaudit_intro_seen";
+
+// Kartu kecil pojok kiri bawah berisi penjelasan singkat fitur — muncul
+// sekali saja saat pertama kali masuk dashboard, lalu diingat lewat
+// localStorage supaya tidak mengganggu di reload/login berikutnya.
+function maybeShowIntro() {
+  if (localStorage.getItem(INTRO_SEEN_KEY)) return;
+  introCard.hidden = false;
+}
+
+introClose.addEventListener("click", () => {
+  introCard.hidden = true;
+  localStorage.setItem(INTRO_SEEN_KEY, "1");
+});
 
 function showAuth(message) {
   showView("auth");
