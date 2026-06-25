@@ -66,18 +66,6 @@ function labelValue(doc, label, value) {
     .text(value ?? "-");
 }
 
-// PDF tidak bisa "menembus" isi ZIP secara umum — satu-satunya cara link di
-// satu PDF bisa membuka file PDF lain adalah action "Launch" dengan path
-// relatif (didukung luas oleh Adobe Acrobat/Reader; browser/viewer lain bisa
-// mengabaikannya karena alasan keamanan, itu keterbatasan format PDF, bukan
-// bug kita). Path relatif tetap valid SELAMA struktur folder ZIP (PDF utama
-// + folder chat/) tidak diubah saat diekstrak.
-function relativeFileLink(doc, x, y, w, h, relativePath) {
-  const action = doc.ref({ S: "Launch", F: new String(relativePath), NewWindow: true });
-  action.end();
-  doc.annotate(x, y, w, h, { Subtype: "Link", A: action, Border: [0, 0, 0] });
-}
-
 function bulletList(doc, items) {
   if (!items?.length) {
     doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Tidak ada.");
@@ -202,50 +190,14 @@ export function buildLeadPdfBuffer(lead) {
   return collectToBuffer(doc);
 }
 
-export function safeFileName(name) {
-  return (name || "lead").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "lead";
-}
-
-// File transkrip chat khusus 1 lead — dipisah dari laporan harian utama
-// karena kalau seluruh chat semua lead digabung jadi 1 PDF, file itu bisa
-// jadi sangat panjang/berat (puluhan-ratusan halaman untuk lead aktif).
-// Laporan utama hanya menaruh ringkasan + pointer ke file ini.
-export function buildLeadChatPdfBuffer(lead, periodLabelLower) {
-  const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
-  const messages = lead.exampleMessages || [];
-
-  drawHeader(
-    doc,
-    `Transkrip Chat — ${lead.lead_name}`,
-    `${periodLabelLower || "periode ini"} · ${messages.length} pesan · Sales: ${lead.staff_name || "-"}`,
-  );
-
-  if (!messages.length) {
-    doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Belum ada chat tercatat di periode ini.");
-  } else {
-    for (const m of messages) {
-      const who = m.direction === "outbound" ? "Sales" : "Lead";
-      doc
-        .fontSize(9)
-        .font("Helvetica-Bold")
-        .fillColor(m.direction === "outbound" ? "#15315f" : "#7a1f1f")
-        .text(`${who} · ${fmtDateTime(m.sent_at)}`);
-      doc
-        .fontSize(10)
-        .font("Helvetica")
-        .fillColor("#1a1a1a")
-        .text(m.body || "", { indent: 10 });
-      doc.moveDown(0.3);
-    }
-  }
-
-  return collectToBuffer(doc);
-}
-
-// --- Laporan harian lengkap untuk owner: snapshot + diagram + ringkasan lead ---
-// Transkrip chat penuh TIDAK dicetak di sini (lihat buildLeadChatPdfBuffer)
-// — kalau ada banyak lead aktif, laporan ini akan tetap ringkas & cepat
-// dibaca, sementara percakapan lengkap per lead ada di file terpisah.
+// --- Laporan harian lengkap untuk owner: snapshot + diagram + ringkasan + chat per lead ---
+// Link "Launch" antar-file (PDF di dalam ZIP) terbukti tidak reliable —
+// banyak viewer (termasuk Adobe Acrobat versi baru) memblokirnya diam-diam
+// demi keamanan, jadi klik kelihatan "tidak terjadi apa-apa". Solusi yang
+// 100% konsisten di SEMUA PDF viewer: 1 file PDF, transkrip chat tiap lead
+// di halaman terpisah pada dokumen yang sama, dan link di ringkasan memakai
+// named destination (doc.goTo/addNamedDestination) — navigasi internal PDF,
+// bukan link ke file lain, jadi tidak ada keterbatasan keamanan apa pun.
 export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel, summary, leads }) {
   const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
   const period = periodLabel || "Periode";
@@ -283,8 +235,10 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
       .fontSize(9)
       .font("Helvetica-Oblique")
       .fillColor("#5b6b85")
-      .text(`Transkrip chat ${periodLower} setiap lead ada di file PDF terpisah dalam folder "chat/" pada arsip ZIP ini. Klik link biru di bawah untuk membukanya langsung (perlu ekstrak ZIP dulu & buka pakai Adobe Acrobat/Reader; sebagian PDF viewer lain membatasi fitur ini demi keamanan).`);
-    for (const lead of leads) {
+      .text(`Klik link biru "Lihat transkrip chat lengkap" pada tiap lead untuk lompat langsung ke percakapan lengkapnya di bagian bawah dokumen ini.`);
+    for (let i = 0; i < leads.length; i += 1) {
+      const lead = leads[i];
+      const destName = `lead-chat-${i}`;
       doc.moveDown(0.4);
       doc.fontSize(11).font("Helvetica-Bold").fillColor("#15315f").text(lead.lead_name);
       labelValue(doc, "Sales", lead.staff_name);
@@ -292,17 +246,12 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
       labelValue(doc, "Skor", lead.score != null ? String(lead.score) : "-");
       labelValue(doc, "Risiko", RISK_LABEL[lead.risk?.level] || "-");
       labelValue(doc, `Jumlah chat ${periodLower}`, String(lead.exampleMessages?.length || 0));
-      const chatRelativePath = `chat/${safeFileName(lead.lead_name)}.pdf`;
-      const linkLabel = `Transkrip lengkap: ${chatRelativePath}`;
+      const linkLabel = "Lihat transkrip chat lengkap →";
       const linkX = doc.x;
       const linkY = doc.y;
-      doc
-        .fontSize(9)
-        .font("Helvetica-Bold")
-        .fillColor("#1d5fd6")
-        .text(linkLabel, { underline: true });
-      const linkWidth = Math.min(doc.widthOfString(linkLabel), doc.page.width - doc.page.margins.right - linkX);
-      relativeFileLink(doc, linkX, linkY, linkWidth, doc.currentLineHeight(), chatRelativePath);
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#1d5fd6").text(linkLabel, { underline: true });
+      const linkWidth = doc.widthOfString(linkLabel);
+      doc.goTo(linkX, linkY, linkWidth, doc.currentLineHeight(), destName);
       doc
         .strokeColor("#dfe4ee")
         .lineWidth(0.5)
@@ -310,6 +259,40 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel
         .lineTo(doc.page.width - doc.page.margins.right, doc.y + 4)
         .stroke();
       doc.moveDown(0.4);
+    }
+  }
+
+  if (leads.length) {
+    doc.addPage();
+    sectionTitle(doc, `Transkrip Chat Lengkap ${period}`);
+    for (let i = 0; i < leads.length; i += 1) {
+      const lead = leads[i];
+      if (i > 0) doc.addPage();
+      doc.addNamedDestination(`lead-chat-${i}`, "XYZ", null, doc.y, null);
+      const messages = lead.exampleMessages || [];
+      drawHeader(
+        doc,
+        `Transkrip Chat — ${lead.lead_name}`,
+        `${periodLower} · ${messages.length} pesan · Sales: ${lead.staff_name || "-"}`,
+      );
+      if (!messages.length) {
+        doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text(`Belum ada chat tercatat di periode ${periodLower}.`);
+      } else {
+        for (const m of messages) {
+          const who = m.direction === "outbound" ? "Sales" : "Lead";
+          doc
+            .fontSize(9)
+            .font("Helvetica-Bold")
+            .fillColor(m.direction === "outbound" ? "#15315f" : "#7a1f1f")
+            .text(`${who} · ${fmtDateTime(m.sent_at)}`);
+          doc
+            .fontSize(10)
+            .font("Helvetica")
+            .fillColor("#1a1a1a")
+            .text(m.body || "", { indent: 10 });
+          doc.moveDown(0.3);
+        }
+      }
     }
   }
 

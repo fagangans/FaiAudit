@@ -1,6 +1,6 @@
 import { supabase } from "../supabase.js";
 import { buildDailyReportData, yesterdayRangeWIB, wibDateKey } from "../reports/dailyReportData.js";
-import { buildDailyReportZipBuffer } from "../reports/dailyReportArchive.js";
+import { buildDailyReportPdfBuffer } from "../reports/pdfBuilder.js";
 import { sendOwnerDocument } from "../whatsapp/connector.js";
 import { logger } from "../logger.js";
 
@@ -39,21 +39,20 @@ async function runOnce() {
 
     try {
       const data = await buildDailyReportData(owner.id, owner.business_name, range);
-      const buffer = await buildDailyReportZipBuffer(data);
+      const buffer = await buildDailyReportPdfBuffer(data);
       const sent = await sendOwnerDocument(
         owner.id,
         owner.notify_wa_number,
         buffer,
-        `FaiAudit-Laporan-Kemarin-${data.dateLabel}.zip`,
-        `*FaiAudit — Laporan Harian (${data.dateLabel})*\n${data.summary.activeLeadCount} lead aktif kemarin, ${data.summary.highRiskCount} lead berisiko tinggi saat ini. Buka file ZIP terlampir: ringkasan + transkrip chat per lead (folder chat/).`,
-        "application/zip",
+        `FaiAudit-Laporan-Kemarin-${data.dateLabel}.pdf`,
+        `*FaiAudit — Laporan Harian (${data.dateLabel})*\n${data.summary.activeLeadCount} lead aktif kemarin, ${data.summary.highRiskCount} lead berisiko tinggi saat ini. Buka file PDF terlampir: ringkasan + diagram + transkrip chat lengkap tiap lead (klik link di bagian "Detail Lead Aktif" untuk lompat ke transkripnya).`,
       );
       if (sent) {
         lastSentDateByOwner.set(owner.id, todayKeyWIB);
-        logger.info({ ownerId: owner.id }, "laporan harian ZIP terkirim via WA");
+        logger.info({ ownerId: owner.id }, "laporan harian PDF terkirim via WA");
       }
     } catch (err) {
-      logger.error({ ownerId: owner.id, err: err.message }, "laporan harian: gagal membuat/mengirim ZIP");
+      logger.error({ ownerId: owner.id, err: err.message }, "laporan harian: gagal membuat/mengirim PDF");
     }
   }
 }
