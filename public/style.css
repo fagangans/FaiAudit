@@ -77,7 +77,6 @@ header h1 .mark { color: var(--text-light); font-weight: 300; }
   padding: 4px 8px;
 }
 
-.dashboard-topbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .legend-wrap { position: relative; }
 .legend-toggle {
   border: 1px solid var(--border);
@@ -593,3 +592,109 @@ tr:hover td { background: var(--surface-alt); }
 }
 .pdf-download-btn:hover { background: var(--navy-700); }
 .pdf-download-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ====================================================================
+   Mobile (<=768px): header/nav jadi scroll horizontal, form 1 kolom,
+   modal/legend/intro-card menyesuaikan lebar viewport, dan tabel data
+   (#sheet, #staffTable, #clientTable, .leaderboard-table) berubah jadi
+   "card" bertumpuk — pola td::before(attr(data-label)) — supaya tidak
+   perlu geser jari horizontal lewat tabel padat-kolom di layar sempit.
+   ==================================================================== */
+@media (max-width: 768px) {
+  header {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    gap: 10px;
+  }
+  header h1 { font-size: 17px; }
+
+  .main-nav {
+    width: 100%;
+    order: 3;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 2px;
+  }
+  .main-nav .nav-link {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .toolbar { flex-wrap: wrap; gap: 8px; }
+  .toolbar button, .toolbar a.btn { padding: 8px 12px; font-size: 12.5px; }
+
+  main { padding: 14px; }
+
+  .dashboard-topbar { flex-direction: column; align-items: stretch; }
+  .filter-bar { gap: 6px; }
+  .filter-bar input, .filter-bar select, .filter-bar button { flex: 1 1 calc(50% - 6px); min-width: 0; }
+  .filter-bar #filterSearch { min-width: 0; flex: 1 1 100%; }
+
+  .legend-wrap { width: 100%; }
+  .legend-list {
+    left: 0;
+    right: 0;
+    width: 100%;
+    grid-template-columns: 100px 1fr;
+  }
+
+  .auth-card { margin: 40px 16px; padding: 28px 20px; }
+
+  .settings-panel { padding: 18px 16px; }
+  .settings-panel form { grid-template-columns: 1fr; }
+
+  .modal { padding: 20px 16px; max-width: calc(100% - 24px); }
+  .modal-overlay { padding: 12px; }
+
+  .intro-card { left: 12px; right: 12px; bottom: 12px; width: auto; }
+
+  /* ---- Tabel data jadi tampilan "card" bertumpuk ---- */
+  #sheet, #staffTable, #clientTable, .leaderboard-table {
+    border: none;
+    box-shadow: none;
+  }
+  #sheet thead, #staffTable thead, #clientTable thead, .leaderboard-table thead {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+  }
+  #sheet tr, #staffTable tr, #clientTable tr, .leaderboard-table tr {
+    display: block;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: 0 1px 4px rgba(10, 26, 48, 0.08);
+    padding: 6px 4px;
+  }
+  #sheet td, #staffTable td, #clientTable td, .leaderboard-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    text-align: right;
+    border-bottom: 1px solid var(--surface-alt);
+    padding: 8px 10px;
+  }
+  #sheet td:last-child, #staffTable td:last-child, #clientTable td:last-child, .leaderboard-table td:last-child {
+    border-bottom: none;
+  }
+  #sheet td::before, #staffTable td::before, #clientTable td::before, .leaderboard-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  #sheet tbody tr:not([data-label]):only-child td,
+  #sheet tbody tr td[colspan] {
+    display: block;
+    text-align: left;
+  }
+  #sheet tbody tr td[colspan]::before { content: none; }
+}

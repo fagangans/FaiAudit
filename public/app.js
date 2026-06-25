@@ -262,9 +262,13 @@ function riskBadge(risk) {
   return span;
 }
 
-function cell(text) {
+// data-label dipakai CSS (td::before) untuk tampilan "card" di mobile —
+// setiap sel data perlu tahu nama kolomnya sendiri karena <thead> disembunyikan
+// secara visual pada breakpoint sempit.
+function cell(text, label) {
   const td = document.createElement("td");
   td.textContent = text ?? "-";
+  if (label) td.dataset.label = label;
   return td;
 }
 
@@ -331,9 +335,10 @@ function renderDashboardRows(rows) {
 
   for (const r of rows) {
     const tr = document.createElement("tr");
-    tr.append(cell(r.staff_name));
+    tr.append(cell(r.staff_name, "Sales"));
 
     const leadTd = document.createElement("td");
+    leadTd.dataset.label = "Lead";
     const leadLink = document.createElement("a");
     leadLink.href = "#";
     leadLink.className = "lead-link";
@@ -345,25 +350,28 @@ function renderDashboardRows(rows) {
     leadTd.appendChild(leadLink);
     tr.appendChild(leadTd);
 
-    tr.append(cell(r.wa_status), cell(r.previous_stage));
+    tr.append(cell(r.wa_status, "Status WA"), cell(r.previous_stage, "Stage Sebelumnya"));
 
     const stageTd = document.createElement("td");
+    stageTd.dataset.label = "Funnel Stage";
     stageTd.appendChild(stageBadge(r.funnel_stage));
     tr.appendChild(stageTd);
 
-    tr.append(cell(r.score));
+    tr.append(cell(r.score, "Skor"));
 
     const riskTd = document.createElement("td");
+    riskTd.dataset.label = "Risiko";
     riskTd.appendChild(riskBadge(r.risk));
     tr.appendChild(riskTd);
 
     tr.append(
-      cell(r.analysis_notes),
-      cell(r.evaluation),
-      cell(r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "-"),
+      cell(r.analysis_notes, "Catatan Analisis"),
+      cell(r.evaluation, "Evaluasi"),
+      cell(r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "-", "Dianalisis"),
     );
 
     const actionTd = document.createElement("td");
+    actionTd.dataset.label = "Aksi";
     const btn = document.createElement("button");
     btn.textContent = "Analisis";
     btn.addEventListener("click", async () => {
@@ -722,7 +730,12 @@ function renderAnalytics(rows) {
     const tbody = document.createElement("tbody");
     for (const entry of leaderboard) {
       const tr = document.createElement("tr");
-      tr.append(cell(entry.name), cell(entry.total), cell(entry.avgScore ?? "-"), cell(entry.closedWon));
+      tr.append(
+        cell(entry.name, "Sales"),
+        cell(entry.total, "Total Lead"),
+        cell(entry.avgScore ?? "-", "Skor Rata-rata"),
+        cell(entry.closedWon, "Closing"),
+      );
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -979,9 +992,10 @@ document.getElementById("refresh").addEventListener("click", loadDashboard);
 document.getElementById("addStaffSalesPage").addEventListener("click", openAddSalesModal);
 document.getElementById("logoutSales").addEventListener("click", logout);
 
-function staffCell(text) {
+function staffCell(text, label) {
   const td = document.createElement("td");
   td.textContent = text ?? "-";
+  if (label) td.dataset.label = label;
   return td;
 }
 
@@ -1013,13 +1027,14 @@ async function loadStaff() {
   for (const s of rows) {
     const tr = document.createElement("tr");
     tr.append(
-      staffCell(s.name),
-      staffCell(s.wa_number),
-      staffCell(s.wa_session_status),
-      staffCell(new Date(s.created_at).toLocaleString("id-ID")),
+      staffCell(s.name, "Nama"),
+      staffCell(s.wa_number, "Nomor WA"),
+      staffCell(s.wa_session_status, "Status"),
+      staffCell(new Date(s.created_at).toLocaleString("id-ID"), "Terhubung Sejak"),
     );
 
     const actionTd = document.createElement("td");
+    actionTd.dataset.label = "Aksi";
 
     if (s.wa_session_status !== "connected") {
       const reconnectBtn = document.createElement("button");
@@ -1056,9 +1071,10 @@ async function loadStaff() {
   }
 }
 
-function clientCell(text) {
+function clientCell(text, label) {
   const td = document.createElement("td");
   td.textContent = text ?? "-";
+  if (label) td.dataset.label = label;
   return td;
 }
 
@@ -1084,9 +1100,10 @@ async function loadClients() {
 
   for (const c of rows) {
     const tr = document.createElement("tr");
-    tr.append(clientCell(c.name), clientCell(c.business_name), clientCell(c.plan));
+    tr.append(clientCell(c.name, "Nama"), clientCell(c.business_name, "Usaha"), clientCell(c.plan, "Plan"));
 
     const providerTd = document.createElement("td");
+    providerTd.dataset.label = "Provider AI";
     const select = document.createElement("select");
     select.className = "ai-provider-select";
     select.append(
@@ -1112,9 +1129,10 @@ async function loadClients() {
     providerTd.appendChild(select);
     tr.appendChild(providerTd);
 
-    tr.appendChild(clientCell(new Date(c.created_at).toLocaleDateString("id-ID")));
+    tr.appendChild(clientCell(new Date(c.created_at).toLocaleDateString("id-ID"), "Terdaftar"));
 
     const actionTd = document.createElement("td");
+    actionTd.dataset.label = "Aksi";
     const btn = document.createElement("button");
     btn.textContent = "Hapus";
     btn.addEventListener("click", async () => {
