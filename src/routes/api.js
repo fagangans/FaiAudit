@@ -2,7 +2,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import { supabase, supabaseAuth } from "../supabase.js";
 import { startStaffSession, stopStaffSession, getPairingState } from "../whatsapp/connector.js";
-import { analyzeLead } from "../ai/analyze.js";
+import { analyzeLead, computeLeadRisk, FUNNEL_STAGES } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
 
 export const router = express.Router();
@@ -190,7 +190,7 @@ router.get("/dashboard", requireOwner, async (req, res) => {
   const { data, error } = await supabase
     .from("leads")
     .select(
-      `id, name, wa_jid, created_at,
+      `id, name, wa_jid, created_at, last_message_at, tags,
        staff:staff_id ( id, name, wa_number, wa_session_status ),
        lead_audits ( funnel_stage, previous_stage, score, analysis_notes, evaluation, analyzed_at )`,
     )
@@ -199,20 +199,134 @@ router.get("/dashboard", requireOwner, async (req, res) => {
 
   if (error) return res.status(400).json({ error: error.message });
 
-  const rows = data.map((lead) => ({
-    lead_id: lead.id,
-    lead_name: lead.name || lead.wa_jid,
-    staff_name: lead.staff?.name,
-    wa_status: lead.staff?.wa_session_status,
-    funnel_stage: lead.lead_audits?.funnel_stage || "new",
-    previous_stage: lead.lead_audits?.previous_stage || "-",
-    score: lead.lead_audits?.score ?? "-",
-    analysis_notes: lead.lead_audits?.analysis_notes || "-",
-    evaluation: lead.lead_audits?.evaluation || "-",
-    analyzed_at: lead.lead_audits?.analyzed_at || null,
-  }));
+  const rows = data.map((lead) => {
+    const funnel_stage = lead.lead_audits?.funnel_stage || "new";
+    return {
+      lead_id: lead.id,
+      lead_name: lead.name || lead.wa_jid,
+      staff_name: lead.staff?.name,
+      wa_status: lead.staff?.wa_session_status,
+      funnel_stage,
+      previous_stage: lead.lead_audits?.previous_stage || "-",
+      score: lead.lead_audits?.score ?? "-",
+      analysis_notes: lead.lead_audits?.analysis_notes || "-",
+      evaluation: lead.lead_audits?.evaluation || "-",
+      analyzed_at: lead.lead_audits?.analyzed_at || null,
+      tags: lead.tags || [],
+      risk: computeLeadRisk({ funnel_stage, score: lead.lead_audits?.score, last_message_at: lead.last_message_at }),
+    };
+  });
 
   res.json(rows);
+});
+
+// Halaman Detail Lead: info kontak, AI intelligence (skor, buying
+// signal/objection, risiko heuristik), catatan manual owner, tag, dan
+// timeline chat lengkap untuk satu lead.
+router.get("/leads/:id", requireOwner, async (req, res) => {
+  const { data: lead, error } = await supabase
+    .from("leads")
+    .select(
+      `id, name, wa_jid, created_at, last_message_at, owner_note, tags,
+       staff:staff_id ( id, name, wa_number, wa_session_status ),
+       lead_audits ( funnel_stage, previous_stage, score, analysis_notes, evaluation, analyzed_at, buying_signals, objections )`,
+    )
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .maybeSingle();
+  if (error) return res.status(400).json({ error: error.message });
+  if (!lead) return res.status(404).json({ error: "Lead tidak ditemukan" });
+
+  const { data: messages, error: msgError } = await supabase
+    .from("messages")
+    .select("id, direction, body, sent_at")
+    .eq("lead_id", lead.id)
+    .order("sent_at", { ascending: true })
+    .limit(500);
+  if (msgError) return res.status(400).json({ error: msgError.message });
+
+  const funnel_stage = lead.lead_audits?.funnel_stage || "new";
+  res.json({
+    lead_id: lead.id,
+    lead_name: lead.name || lead.wa_jid,
+    wa_jid: lead.wa_jid,
+    staff_name: lead.staff?.name,
+    wa_status: lead.staff?.wa_session_status,
+    created_at: lead.created_at,
+    owner_note: lead.owner_note || "",
+    tags: lead.tags || [],
+    funnel_stage,
+    previous_stage: lead.lead_audits?.previous_stage || "-",
+    score: lead.lead_audits?.score ?? null,
+    analysis_notes: lead.lead_audits?.analysis_notes || "",
+    evaluation: lead.lead_audits?.evaluation || "",
+    buying_signals: lead.lead_audits?.buying_signals || [],
+    objections: lead.lead_audits?.objections || [],
+    analyzed_at: lead.lead_audits?.analyzed_at || null,
+    risk: computeLeadRisk({ funnel_stage, score: lead.lead_audits?.score, last_message_at: lead.last_message_at }),
+    messages: messages || [],
+  });
+});
+
+// Catatan manual & tag owner — terpisah dari analysis_notes/evaluation AI
+// supaya tidak pernah saling menimpa.
+router.patch("/leads/:id", requireOwner, async (req, res) => {
+  const update = {};
+  if (typeof req.body?.owner_note === "string") {
+    update.owner_note = req.body.owner_note.slice(0, 4000);
+  }
+  if (Array.isArray(req.body?.tags)) {
+    update.tags = req.body.tags
+      .filter((t) => typeof t === "string" && t.trim())
+      .slice(0, 20)
+      .map((t) => t.trim().slice(0, 40));
+  }
+  if (!Object.keys(update).length) {
+    return res.status(400).json({ error: "Tidak ada field valid (owner_note/tags) untuk diubah" });
+  }
+
+  const { data, error } = await supabase
+    .from("leads")
+    .update(update)
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .select("id, owner_note, tags")
+    .maybeSingle();
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Lead tidak ditemukan" });
+  res.json(data);
+});
+
+// Ubah funnel stage secara manual (override hasil AI) — dipakai tombol "ubah
+// stage cepat" di halaman detail lead.
+router.patch("/leads/:id/stage", requireOwner, async (req, res) => {
+  const { funnel_stage } = req.body || {};
+  if (!FUNNEL_STAGES.includes(funnel_stage)) {
+    return res.status(400).json({ error: `funnel_stage harus salah satu dari: ${FUNNEL_STAGES.join(", ")}` });
+  }
+
+  const { data: lead, error: findError } = await supabase
+    .from("leads")
+    .select("id, lead_audits(funnel_stage)")
+    .eq("id", req.params.id)
+    .eq("owner_id", req.ownerId)
+    .maybeSingle();
+  if (findError) return res.status(400).json({ error: findError.message });
+  if (!lead) return res.status(404).json({ error: "Lead tidak ditemukan" });
+
+  const previousStage = lead.lead_audits?.funnel_stage || "new";
+  const { error } = await supabase.from("lead_audits").upsert(
+    {
+      lead_id: lead.id,
+      funnel_stage,
+      previous_stage: previousStage,
+      ai_model: "manual",
+      analyzed_at: new Date().toISOString(),
+    },
+    { onConflict: "lead_id" },
+  );
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ ok: true, funnel_stage, previous_stage: previousStage });
 });
 
 router.post("/leads/:id/analyze", requireOwner, analyzeLimiter, async (req, res) => {

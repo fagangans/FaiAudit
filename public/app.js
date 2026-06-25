@@ -17,6 +17,9 @@ const modalContent = document.getElementById("modalContent");
 const modalClose = document.getElementById("modalClose");
 const introCard = document.getElementById("introCard");
 const introClose = document.getElementById("introClose");
+const leadModalOverlay = document.getElementById("leadModalOverlay");
+const leadModalContent = document.getElementById("leadModalContent");
+const leadModalClose = document.getElementById("leadModalClose");
 
 function getToken() {
   return localStorage.getItem("faiaudit_token") || "";
@@ -159,6 +162,19 @@ function stageBadge(stage) {
   return span;
 }
 
+const FUNNEL_STAGES = ["new", "contacted", "interested", "negotiation", "closed_won", "closed_lost"];
+
+const RISK_LABEL = { rendah: "Rendah", sedang: "Sedang", tinggi: "Tinggi", selesai: "Selesai" };
+
+function riskBadge(risk) {
+  const span = document.createElement("span");
+  const level = risk?.level || "rendah";
+  span.className = `risk risk-${level}`;
+  span.textContent = RISK_LABEL[level] || level;
+  if (risk?.reason) span.title = risk.reason;
+  return span;
+}
+
 function cell(text) {
   const td = document.createElement("td");
   td.textContent = text ?? "-";
@@ -178,7 +194,7 @@ async function loadDashboard() {
   if (!res.ok) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 10;
+    td.colSpan = 11;
     td.textContent = rows.error || "Gagal memuat data";
     tr.appendChild(td);
     sheetBody.appendChild(tr);
@@ -188,7 +204,7 @@ async function loadDashboard() {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 10;
+    td.colSpan = 11;
     td.textContent = "Belum ada lead. Tambahkan sales dan tunggu chat masuk.";
     tr.appendChild(td);
     sheetBody.appendChild(tr);
@@ -197,19 +213,33 @@ async function loadDashboard() {
 
   for (const r of rows) {
     const tr = document.createElement("tr");
-    tr.append(
-      cell(r.staff_name),
-      cell(r.lead_name),
-      cell(r.wa_status),
-      cell(r.previous_stage),
-    );
+    tr.append(cell(r.staff_name));
+
+    const leadTd = document.createElement("td");
+    const leadLink = document.createElement("a");
+    leadLink.href = "#";
+    leadLink.className = "lead-link";
+    leadLink.textContent = r.lead_name || "-";
+    leadLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      openLeadDetail(r.lead_id);
+    });
+    leadTd.appendChild(leadLink);
+    tr.appendChild(leadTd);
+
+    tr.append(cell(r.wa_status), cell(r.previous_stage));
 
     const stageTd = document.createElement("td");
     stageTd.appendChild(stageBadge(r.funnel_stage));
     tr.appendChild(stageTd);
 
+    tr.append(cell(r.score));
+
+    const riskTd = document.createElement("td");
+    riskTd.appendChild(riskBadge(r.risk));
+    tr.appendChild(riskTd);
+
     tr.append(
-      cell(r.score),
       cell(r.analysis_notes),
       cell(r.evaluation),
       cell(r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "-"),
@@ -575,6 +605,280 @@ clientForm.addEventListener("submit", async (event) => {
     clientError.textContent = err.message;
   }
 });
+
+// ---- Halaman Detail Lead ----
+function closeLeadModal() {
+  leadModalOverlay.hidden = true;
+  leadModalContent.innerHTML = "";
+}
+
+leadModalClose.addEventListener("click", closeLeadModal);
+leadModalOverlay.addEventListener("click", (e) => {
+  if (e.target === leadModalOverlay) closeLeadModal();
+});
+
+function chip(text) {
+  const span = document.createElement("span");
+  span.className = "chip";
+  span.textContent = text;
+  return span;
+}
+
+function tagChip(text, onRemove) {
+  const span = document.createElement("span");
+  span.className = "chip chip-tag";
+  const label = document.createElement("span");
+  label.textContent = text;
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "chip-remove";
+  x.textContent = "×";
+  x.addEventListener("click", onRemove);
+  span.append(label, x);
+  return span;
+}
+
+async function openLeadDetail(leadId) {
+  leadModalContent.innerHTML = '<p class="hint">Memuat detail lead…</p>';
+  leadModalOverlay.hidden = false;
+
+  const res = await apiFetch(`/api/leads/${leadId}`);
+  const data = await res.json();
+  if (!res.ok) {
+    leadModalContent.innerHTML = `<p class="error">${data.error || "Gagal memuat lead"}</p>`;
+    return;
+  }
+  renderLeadDetail(data);
+}
+
+function renderLeadDetail(lead) {
+  leadModalContent.innerHTML = "";
+
+  const h = document.createElement("h2");
+  h.textContent = lead.lead_name;
+  leadModalContent.appendChild(h);
+
+  const sub = document.createElement("p");
+  sub.className = "hint";
+  sub.textContent = `Sales: ${lead.staff_name || "-"} · WA: ${lead.wa_jid || "-"} · Status: ${lead.wa_status || "-"}`;
+  leadModalContent.appendChild(sub);
+
+  // --- AI Intelligence Card ---
+  const aiCard = document.createElement("div");
+  aiCard.className = "ai-card";
+
+  const aiHeader = document.createElement("div");
+  aiHeader.className = "ai-card-header";
+  aiHeader.appendChild(riskBadge(lead.risk));
+  aiHeader.appendChild(stageBadge(lead.funnel_stage));
+  const scoreSpan = document.createElement("span");
+  scoreSpan.className = "ai-score";
+  scoreSpan.textContent = lead.score != null ? `Skor: ${lead.score}` : "Skor: -";
+  aiHeader.appendChild(scoreSpan);
+  aiCard.appendChild(aiHeader);
+
+  if (lead.risk?.reason) {
+    const riskReason = document.createElement("p");
+    riskReason.className = "hint";
+    riskReason.textContent = `Risiko (heuristik): ${lead.risk.reason}`;
+    aiCard.appendChild(riskReason);
+  }
+
+  if (lead.analysis_notes) {
+    const notesP = document.createElement("p");
+    notesP.innerHTML = `<strong>Catatan analisis:</strong> ${lead.analysis_notes}`;
+    aiCard.appendChild(notesP);
+  }
+  if (lead.evaluation) {
+    const evalP = document.createElement("p");
+    evalP.innerHTML = `<strong>Evaluasi:</strong> ${lead.evaluation}`;
+    aiCard.appendChild(evalP);
+  }
+
+  if (lead.buying_signals?.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "chip-row";
+    const label = document.createElement("span");
+    label.className = "chip-row-label";
+    label.textContent = "Sinyal beli:";
+    wrap.appendChild(label);
+    lead.buying_signals.forEach((s) => wrap.appendChild(chip(s)));
+    aiCard.appendChild(wrap);
+  }
+  if (lead.objections?.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "chip-row";
+    const label = document.createElement("span");
+    label.className = "chip-row-label";
+    label.textContent = "Keberatan:";
+    wrap.appendChild(label);
+    lead.objections.forEach((s) => wrap.appendChild(chip(s)));
+    aiCard.appendChild(wrap);
+  }
+
+  leadModalContent.appendChild(aiCard);
+
+  // --- Quick stage change ---
+  const stageForm = document.createElement("form");
+  stageForm.className = "inline-form";
+  const stageSelect = document.createElement("select");
+  FUNNEL_STAGES.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
+    if (s === lead.funnel_stage) opt.selected = true;
+    stageSelect.appendChild(opt);
+  });
+  const stageBtn = document.createElement("button");
+  stageBtn.type = "submit";
+  stageBtn.textContent = "Ubah Stage";
+  stageForm.append(stageSelect, stageBtn);
+  stageForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    stageBtn.disabled = true;
+    try {
+      const res = await apiFetch(`/api/leads/${lead.lead_id}/stage`, {
+        method: "PATCH",
+        body: JSON.stringify({ funnel_stage: stageSelect.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || "Gagal mengubah stage");
+      await openLeadDetail(lead.lead_id);
+      await loadDashboard();
+    } finally {
+      stageBtn.disabled = false;
+    }
+  });
+  leadModalContent.appendChild(stageForm);
+
+  // --- Tags ---
+  const tagSection = document.createElement("div");
+  tagSection.className = "lead-section";
+  const tagTitle = document.createElement("h3");
+  tagTitle.textContent = "Tag";
+  tagSection.appendChild(tagTitle);
+
+  const tagRow = document.createElement("div");
+  tagRow.className = "chip-row";
+  let currentTags = [...(lead.tags || [])];
+
+  function renderTags() {
+    tagRow.innerHTML = "";
+    currentTags.forEach((t, i) => {
+      tagRow.appendChild(
+        tagChip(t, async () => {
+          currentTags = currentTags.filter((_, idx) => idx !== i);
+          await saveTags();
+        }),
+      );
+    });
+  }
+
+  async function saveTags() {
+    const res = await apiFetch(`/api/leads/${lead.lead_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tags: currentTags }),
+    });
+    const data = await res.json();
+    if (!res.ok) return alert(data.error || "Gagal menyimpan tag");
+    currentTags = data.tags || [];
+    renderTags();
+    loadDashboard();
+  }
+
+  renderTags();
+  tagSection.appendChild(tagRow);
+
+  const tagForm = document.createElement("form");
+  tagForm.className = "inline-form";
+  const tagInput = document.createElement("input");
+  tagInput.type = "text";
+  tagInput.placeholder = "Tambah tag, lalu Enter";
+  const tagAddBtn = document.createElement("button");
+  tagAddBtn.type = "submit";
+  tagAddBtn.textContent = "Tambah";
+  tagForm.append(tagInput, tagAddBtn);
+  tagForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const value = tagInput.value.trim();
+    if (!value) return;
+    currentTags = [...currentTags, value];
+    tagInput.value = "";
+    await saveTags();
+  });
+  tagSection.appendChild(tagForm);
+  leadModalContent.appendChild(tagSection);
+
+  // --- Owner note ---
+  const noteSection = document.createElement("div");
+  noteSection.className = "lead-section";
+  const noteTitle = document.createElement("h3");
+  noteTitle.textContent = "Catatan Manual";
+  noteSection.appendChild(noteTitle);
+
+  const noteForm = document.createElement("form");
+  noteForm.className = "note-form";
+  const noteArea = document.createElement("textarea");
+  noteArea.rows = 3;
+  noteArea.placeholder = "Catatan pribadi Anda tentang lead ini (tidak ditimpa AI)";
+  noteArea.value = lead.owner_note || "";
+  const noteBtn = document.createElement("button");
+  noteBtn.type = "submit";
+  noteBtn.textContent = "Simpan Catatan";
+  noteForm.append(noteArea, noteBtn);
+  noteForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    noteBtn.disabled = true;
+    noteBtn.textContent = "Menyimpan…";
+    try {
+      const res = await apiFetch(`/api/leads/${lead.lead_id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ owner_note: noteArea.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || "Gagal menyimpan catatan");
+      noteBtn.textContent = "Tersimpan ✓";
+    } finally {
+      setTimeout(() => {
+        noteBtn.disabled = false;
+        noteBtn.textContent = "Simpan Catatan";
+      }, 1200);
+    }
+  });
+  noteSection.appendChild(noteForm);
+  leadModalContent.appendChild(noteSection);
+
+  // --- Timeline ---
+  const timelineSection = document.createElement("div");
+  timelineSection.className = "lead-section";
+  const timelineTitle = document.createElement("h3");
+  timelineTitle.textContent = "Riwayat Chat";
+  timelineSection.appendChild(timelineTitle);
+
+  const timeline = document.createElement("div");
+  timeline.className = "timeline";
+  if (!lead.messages?.length) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "Belum ada chat tercatat.";
+    timeline.appendChild(p);
+  } else {
+    for (const m of lead.messages) {
+      const item = document.createElement("div");
+      item.className = `timeline-item timeline-${m.direction}`;
+      const meta = document.createElement("div");
+      meta.className = "timeline-meta";
+      meta.textContent = `${m.direction === "outbound" ? "Sales" : "Lead"} · ${new Date(m.sent_at).toLocaleString("id-ID")}`;
+      const body = document.createElement("div");
+      body.className = "timeline-body";
+      body.textContent = m.body || "";
+      item.append(meta, body);
+      timeline.appendChild(item);
+    }
+  }
+  timelineSection.appendChild(timeline);
+  leadModalContent.appendChild(timelineSection);
+}
 
 // Pulihkan sesi saat halaman dibuka/di-reload: kalau ada token, kembalikan ke
 // halaman terakhir (dashboard atau pengaturan). loadMe() lewat apiFetch akan

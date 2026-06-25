@@ -4,7 +4,7 @@ import * as qwenProvider from "./providers/qwen.js";
 
 const providers = { scraper: scraperProvider, qwen: qwenProvider };
 
-const FUNNEL_STAGES = [
+export const FUNNEL_STAGES = [
   "new",
   "contacted",
   "interested",
@@ -31,7 +31,17 @@ ${transcript}
 --- AKHIR TRANSKRIP ---
 
 Balas HANYA dalam format JSON tanpa teks lain, dengan struktur:
-{"funnel_stage": "...", "score": 0-100, "analysis_notes": "ringkasan singkat pola komunikasi & objection handling", "evaluation": "rekomendasi konkret untuk sales agar performa meningkat"}`;
+{"funnel_stage": "...", "score": 0-100, "analysis_notes": "ringkasan singkat pola komunikasi & objection handling", "evaluation": "rekomendasi konkret untuk sales agar performa meningkat", "buying_signals": ["sinyal beli singkat yang terdeteksi, mis. 'menanyakan harga', kosongkan array kalau tidak ada"], "objections": ["keberatan singkat yang terdeteksi, mis. 'harga dianggap mahal', kosongkan array kalau tidak ada"]}`;
+}
+
+// Daftar string bebas dari AI (buying signal/objection) dibatasi panjang &
+// jumlah supaya respons rusak/berlebihan tidak membengkakkan DB atau UI.
+function sanitizeStringArray(value, { maxItems = 8, maxLen = 200 } = {}) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v) => typeof v === "string" && v.trim())
+    .slice(0, maxItems)
+    .map((v) => v.trim().slice(0, maxLen));
 }
 
 function parseResult(raw) {
@@ -45,13 +55,40 @@ function parseResult(raw) {
   parsed.score = Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : null;
   parsed.analysis_notes = typeof parsed.analysis_notes === "string" ? parsed.analysis_notes.slice(0, 2000) : "";
   parsed.evaluation = typeof parsed.evaluation === "string" ? parsed.evaluation.slice(0, 2000) : "";
+  parsed.buying_signals = sanitizeStringArray(parsed.buying_signals);
+  parsed.objections = sanitizeStringArray(parsed.objections);
   return parsed;
+}
+
+// Skor risiko/prioritas HEURISTIK (bukan model prediktif terlatih) — gabungan
+// funnel stage + skor AI + lama tidak ada balasan lead. Sengaja tidak disebut
+// "probability" karena belum ada data historis closed-won/lost untuk
+// melatih model statistik sungguhan.
+const STAGE_WEIGHT = { new: 0, contacted: 1, interested: 2, negotiation: 3, closed_won: 4, closed_lost: 4 };
+export function computeLeadRisk({ funnel_stage, score, last_message_at }) {
+  if (funnel_stage === "closed_won" || funnel_stage === "closed_lost") {
+    return { level: "selesai", reason: funnel_stage === "closed_won" ? "Sudah closing" : "Sudah hilang" };
+  }
+  const daysSinceReply = last_message_at
+    ? (Date.now() - new Date(last_message_at).getTime()) / 86400000
+    : null;
+  const lowScore = typeof score === "number" && score < 40;
+  const stale = daysSinceReply !== null && daysSinceReply >= 3;
+  const advancedStage = STAGE_WEIGHT[funnel_stage] >= 2;
+
+  if (stale && advancedStage) {
+    return { level: "tinggi", reason: `Sudah ${Math.floor(daysSinceReply)} hari tanpa balasan di stage lanjut` };
+  }
+  if (stale || lowScore) {
+    return { level: "sedang", reason: stale ? `${Math.floor(daysSinceReply)} hari tanpa balasan` : "Skor percakapan rendah" };
+  }
+  return { level: "rendah", reason: "Percakapan masih aktif" };
 }
 
 export async function analyzeLead(leadId, { force = false } = {}) {
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("id, last_message_at, lead_audits(funnel_stage, analyzed_at, score, analysis_notes, evaluation)")
+    .select("id, last_message_at, lead_audits(funnel_stage, analyzed_at, score, analysis_notes, evaluation, buying_signals, objections)")
     .eq("id", leadId)
     .single();
   if (leadError) throw leadError;
@@ -66,6 +103,8 @@ export async function analyzeLead(leadId, { force = false } = {}) {
       score: audit.score,
       analysis_notes: audit.analysis_notes,
       evaluation: audit.evaluation,
+      buying_signals: audit.buying_signals || [],
+      objections: audit.objections || [],
       skipped: true,
     };
   }
@@ -92,6 +131,8 @@ export async function analyzeLead(leadId, { force = false } = {}) {
       score: result.score,
       analysis_notes: result.analysis_notes,
       evaluation: result.evaluation,
+      buying_signals: result.buying_signals,
+      objections: result.objections,
       ai_model: process.env.AI_PROVIDER || "scraper",
       analyzed_at: new Date().toISOString(),
     },

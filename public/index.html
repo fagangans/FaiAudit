@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -42,6 +42,7 @@
             <th>Stage Sebelumnya</th>
             <th>Funnel Stage</th>
             <th>Skor</th>
+            <th>Risiko</th>
             <th>Catatan Analisis</th>
             <th>Evaluasi</th>
             <th>Dianalisis</th>
@@ -102,6 +103,13 @@
     </div>
   </div>
 
+  <div id="leadModalOverlay" class="modal-overlay" hidden>
+    <div class="modal modal-lead">
+      <button type="button" class="modal-close" id="leadModalClose" aria-label="Tutup">×</button>
+      <div id="leadModalContent"></div>
+    </div>
+  </div>
+
   <aside id="introCard" class="intro-card" hidden>
     <button type="button" class="intro-close" id="introClose" aria-label="Tutup">×</button>
     <h3>👋 Tentang FaiAudit</h3>
@@ -112,6 +120,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
