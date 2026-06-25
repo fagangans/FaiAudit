@@ -5,7 +5,7 @@ import { startStaffSession, stopStaffSession, getPairingState } from "../whatsap
 import { analyzeLead, computeLeadRisk, FUNNEL_STAGES } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
 import { buildLeadPdfBuffer, buildDailyReportPdfBuffer } from "../reports/pdfBuilder.js";
-import { buildDailyReportData } from "../reports/dailyReportData.js";
+import { buildDailyReportData, todayRangeWIB } from "../reports/dailyReportData.js";
 
 export const router = express.Router();
 
@@ -327,14 +327,18 @@ router.get("/leads/:id/pdf", requireOwner, async (req, res) => {
   }
 });
 
-// Download manual laporan harian (snapshot funnel/risiko + lead yang ada
-// chat kemarin) — fungsi data yang sama dipakai scheduler WA pagi otomatis.
+// Download manual laporan HARI INI dari dashboard (snapshot funnel/risiko +
+// lead yang ada chat hari ini, lengkap seluruh isi chat + diagram). Laporan
+// HARI KEMARIN dikirim otomatis oleh scheduler ke WA pribadi owner — bukan
+// lewat endpoint ini — supaya tidak rancu dengan apa yang dilihat di
+// dashboard saat ini juga.
 router.get("/reports/daily/pdf", requireOwner, async (req, res) => {
   try {
-    const data = await buildDailyReportData(req.ownerId, req.owner.business_name);
+    const range = todayRangeWIB();
+    const data = await buildDailyReportData(req.ownerId, req.owner.business_name, range);
     const buffer = await buildDailyReportPdfBuffer(data);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-Harian-${data.dateLabel}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-HariIni-${data.dateLabel}.pdf"`);
     res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: "Gagal membuat laporan harian: " + err.message });

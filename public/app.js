@@ -585,12 +585,41 @@ function renderKanban(rows) {
 }
 
 // ---- Analitik ----
-function analyticsCard(title, rowsOfPairs) {
+// `barRows` (opsional): [{ label, count }] data nyata per kategori, dipakai
+// untuk gambar diagram batang horizontal di bawah daftar angka — supaya
+// distribusi mudah dibaca sekilas, bukan cuma deretan angka/persen.
+function analyticsCard(title, rowsOfPairs, barRows) {
   const card = document.createElement("div");
   card.className = "analytics-card";
   const h = document.createElement("h3");
   h.textContent = title;
   card.appendChild(h);
+
+  if (barRows?.length) {
+    const max = Math.max(1, ...barRows.map((r) => r.count));
+    const chart = document.createElement("div");
+    chart.className = "analytics-chart";
+    for (const row of barRows) {
+      const barRow = document.createElement("div");
+      barRow.className = "analytics-bar-row";
+      const label = document.createElement("span");
+      label.className = "analytics-bar-label";
+      label.textContent = row.label;
+      const track = document.createElement("div");
+      track.className = "analytics-bar-track";
+      const fill = document.createElement("div");
+      fill.className = "analytics-bar-fill";
+      fill.style.width = `${Math.max(2, Math.round((row.count / max) * 100))}%`;
+      track.appendChild(fill);
+      const count = document.createElement("span");
+      count.className = "analytics-bar-count";
+      count.textContent = String(row.count);
+      barRow.append(label, track, count);
+      chart.appendChild(barRow);
+    }
+    card.appendChild(chart);
+  }
+
   const list = document.createElement("ul");
   list.className = "analytics-list";
   for (const [label, value] of rowsOfPairs) {
@@ -627,18 +656,20 @@ function renderAnalytics(rows) {
 
   const total = rows.length || 1;
 
-  const stagePairs = FUNNEL_STAGES.map((s) => {
-    const count = rows.filter((r) => r.funnel_stage === s).length;
-    return [STAGE_LABEL[s] || s, `${count} (${Math.round((count / total) * 100)}%)`];
-  });
-  analyticsGrid.appendChild(analyticsCard("Distribusi Funnel Stage", stagePairs));
+  const stageCounts = FUNNEL_STAGES.map((s) => ({
+    label: STAGE_LABEL[s] || s,
+    count: rows.filter((r) => r.funnel_stage === s).length,
+  }));
+  const stagePairs = stageCounts.map(({ label, count }) => [label, `${count} (${Math.round((count / total) * 100)}%)`]);
+  analyticsGrid.appendChild(analyticsCard("Distribusi Funnel Stage", stagePairs, stageCounts));
 
   const riskLevels = ["tinggi", "sedang", "rendah", "selesai"];
-  const riskPairs = riskLevels.map((level) => {
-    const count = rows.filter((r) => (r.risk?.level || "") === level).length;
-    return [RISK_LABEL[level], `${count} (${Math.round((count / total) * 100)}%)`];
-  });
-  analyticsGrid.appendChild(analyticsCard("Distribusi Risiko", riskPairs));
+  const riskCounts = riskLevels.map((level) => ({
+    label: RISK_LABEL[level],
+    count: rows.filter((r) => (r.risk?.level || "") === level).length,
+  }));
+  const riskPairs = riskCounts.map(({ label, count }) => [label, `${count} (${Math.round((count / total) * 100)}%)`]);
+  analyticsGrid.appendChild(analyticsCard("Distribusi Risiko", riskPairs, riskCounts));
 
   // Leaderboard sales: rata-rata skor + total lead + closing, dihitung dari
   // data dashboard yang sudah ada — tanpa query/endpoint baru.

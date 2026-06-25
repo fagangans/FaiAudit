@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { buildDailyReportData, yesterdayRangeWIB } from "../reports/dailyReportData.js";
+import { buildDailyReportData, yesterdayRangeWIB, wibDateKey } from "../reports/dailyReportData.js";
 import { buildDailyReportPdfBuffer } from "../reports/pdfBuilder.js";
 import { sendOwnerDocument } from "../whatsapp/connector.js";
 import { logger } from "../logger.js";
@@ -22,7 +22,8 @@ async function runOnce() {
   const now = new Date();
   if (currentHourWIB(now) !== TARGET_HOUR_WIB) return;
 
-  const { todayKeyWIB } = yesterdayRangeWIB(now);
+  const todayKeyWIB = wibDateKey(now);
+  const range = yesterdayRangeWIB(now);
 
   const { data: owners, error } = await supabase
     .from("owners")
@@ -37,13 +38,13 @@ async function runOnce() {
     if (lastSentDateByOwner.get(owner.id) === todayKeyWIB) continue;
 
     try {
-      const data = await buildDailyReportData(owner.id, owner.business_name, now);
+      const data = await buildDailyReportData(owner.id, owner.business_name, range);
       const buffer = await buildDailyReportPdfBuffer(data);
       const sent = await sendOwnerDocument(
         owner.id,
         owner.notify_wa_number,
         buffer,
-        `FaiAudit-Laporan-Harian-${data.dateLabel}.pdf`,
+        `FaiAudit-Laporan-Kemarin-${data.dateLabel}.pdf`,
         `*FaiAudit — Laporan Harian (${data.dateLabel})*\n${data.summary.activeLeadCount} lead aktif kemarin, ${data.summary.highRiskCount} lead berisiko tinggi saat ini. Detail lengkap di PDF terlampir.`,
       );
       if (sent) {

@@ -85,6 +85,45 @@ function paragraph(doc, text) {
     .text(text || "-", { align: "left" });
 }
 
+const CHART_BAR_COLORS = ["#15315f", "#2d5a9e", "#c9a86a", "#7a1f1f", "#3f8f5f", "#7a7a7a"];
+
+// Diagram batang horizontal digambar langsung dengan primitif vektor pdfkit
+// (rect/text) — tanpa lib chart/gambar raster tambahan, supaya tetap ringan
+// (alasan yang sama kenapa pdfkit dipilih di awal) sambil tetap menampilkan
+// data nyata (jumlah lead per stage/risiko) secara akurat & proporsional.
+function horizontalBarChart(doc, items, { maxBarWidth = 260 } = {}) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  const barHeight = 14;
+  const gap = 7;
+  const labelWidth = 100;
+  const startX = doc.page.margins.left + labelWidth;
+
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i];
+    const y = doc.y;
+    const barWidth = item.value > 0 ? Math.max(2, (item.value / max) * maxBarWidth) : 0;
+    const color = CHART_BAR_COLORS[i % CHART_BAR_COLORS.length];
+
+    doc
+      .fontSize(9)
+      .font("Helvetica")
+      .fillColor("#1a1a1a")
+      .text(item.label, doc.page.margins.left, y + 2, { width: labelWidth - 6, align: "left" });
+
+    if (barWidth > 0) doc.rect(startX, y, barWidth, barHeight).fill(color);
+
+    doc
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .fillColor("#1a1a1a")
+      .text(String(item.value), startX + barWidth + 6, y + 2);
+
+    doc.y = y + barHeight + gap;
+    doc.x = doc.page.margins.left;
+  }
+  doc.moveDown(0.3);
+}
+
 // --- Laporan satu lead lengkap, termasuk transkrip chat ---
 export function buildLeadPdfBuffer(lead) {
   const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
@@ -151,24 +190,38 @@ export function buildLeadPdfBuffer(lead) {
   return collectToBuffer(doc);
 }
 
-// --- Laporan harian ringkas untuk owner: snapshot + chat contoh kemarin ---
-export function buildDailyReportPdfBuffer({ businessName, dateLabel, summary, leads }) {
+// --- Laporan harian lengkap untuk owner: snapshot + diagram + transkrip chat ---
+export function buildDailyReportPdfBuffer({ businessName, dateLabel, periodLabel, summary, leads }) {
   const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
+  const period = periodLabel || "Periode";
 
-  drawHeader(doc, `Laporan Harian — ${dateLabel}`, businessName ? `Untuk: ${businessName}` : undefined);
+  drawHeader(doc, `Laporan Harian — ${period} (${dateLabel})`, businessName ? `Untuk: ${businessName}` : undefined);
 
   sectionTitle(doc, "Ringkasan");
-  labelValue(doc, "Lead dengan aktivitas chat kemarin", String(summary.activeLeadCount));
+  labelValue(doc, `Lead dengan aktivitas chat ${period.toLowerCase()}`, String(summary.activeLeadCount));
   labelValue(doc, "Total lead berisiko tinggi (saat ini)", String(summary.highRiskCount));
-  doc.moveDown(0.2);
-  doc.fontSize(10).font("Helvetica-Bold").fillColor("#0f2547").text("Distribusi Funnel Stage (saat ini):");
-  for (const stage of Object.keys(summary.stageCounts)) {
-    labelValue(doc, stageLabel(stage), String(summary.stageCounts[stage]));
+
+  const riskCounts = { tinggi: 0, sedang: 0, rendah: 0, selesai: 0 };
+  for (const lead of leads) {
+    const level = lead.risk?.level;
+    if (level && riskCounts[level] != null) riskCounts[level] += 1;
   }
 
-  sectionTitle(doc, `Detail Lead Aktif Kemarin (${leads.length})`);
+  sectionTitle(doc, "Diagram Distribusi Funnel Stage (saat ini, seluruh lead)");
+  horizontalBarChart(
+    doc,
+    Object.keys(summary.stageCounts).map((stage) => ({ label: stageLabel(stage), value: summary.stageCounts[stage] })),
+  );
+
+  sectionTitle(doc, `Diagram Distribusi Risiko (lead aktif ${period.toLowerCase()})`);
+  horizontalBarChart(
+    doc,
+    Object.keys(riskCounts).map((level) => ({ label: RISK_LABEL[level], value: riskCounts[level] })),
+  );
+
+  sectionTitle(doc, `Detail Lead Aktif ${period} (${leads.length})`);
   if (!leads.length) {
-    doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Tidak ada chat masuk kemarin.");
+    doc.fontSize(10).font("Helvetica-Oblique").fillColor("#7a7a7a").text(`Tidak ada chat masuk ${period.toLowerCase()}.`);
   } else {
     for (const lead of leads) {
       doc.moveDown(0.4);
@@ -178,15 +231,26 @@ export function buildDailyReportPdfBuffer({ businessName, dateLabel, summary, le
       labelValue(doc, "Skor", lead.score != null ? String(lead.score) : "-");
       labelValue(doc, "Risiko", RISK_LABEL[lead.risk?.level] || "-");
       if (lead.exampleMessages?.length) {
-        doc.fontSize(9).font("Helvetica-Bold").fillColor("#0f2547").text("Contoh chat kemarin:");
+        doc
+          .fontSize(9)
+          .font("Helvetica-Bold")
+          .fillColor("#0f2547")
+          .text(`Transkrip chat ${period.toLowerCase()} (${lead.exampleMessages.length} pesan):`);
         for (const m of lead.exampleMessages) {
           const who = m.direction === "outbound" ? "Sales" : "Lead";
           doc
             .fontSize(9)
+            .font("Helvetica-Bold")
+            .fillColor(m.direction === "outbound" ? "#15315f" : "#7a1f1f")
+            .text(`${who} · ${fmtDateTime(m.sent_at)}`, { indent: 10 });
+          doc
+            .fontSize(9)
             .font("Helvetica")
             .fillColor("#1a1a1a")
-            .text(`${who} (${fmtDateTime(m.sent_at)}): ${m.body || ""}`, { indent: 10 });
+            .text(m.body || "", { indent: 16 });
         }
+      } else {
+        doc.fontSize(9).font("Helvetica-Oblique").fillColor("#7a7a7a").text("Belum ada chat tercatat di periode ini.");
       }
       doc
         .strokeColor("#dfe4ee")
