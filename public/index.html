@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=13" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -30,6 +30,19 @@
         <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
       </nav>
       <div class="toolbar">
+        <div class="legend-wrap">
+          <button type="button" class="legend-toggle" id="legendToggle" aria-label="Penjelasan kolom">ⓘ</button>
+          <dl class="legend-list" id="legendList" hidden>
+            <dt>Funnel Stage</dt><dd>Tahap lead saat ini (baru → kontak → tertarik → negosiasi → closing/hilang), dideteksi AI.</dd>
+            <dt>Stage Sebelumnya</dt><dd>Tahap sebelum perubahan terakhir.</dd>
+            <dt>Skor</dt><dd>Nilai 0-100 kualitas percakapan dari AI.</dd>
+            <dt>Risiko</dt><dd>Heuristik seberapa urgent ditindaklanjuti.</dd>
+            <dt>Catatan Analisis</dt><dd>Ringkasan pola chat & objection handling.</dd>
+            <dt>Evaluasi</dt><dd>Rekomendasi AI untuk sales.</dd>
+            <dt>Dianalisis</dt><dd>Waktu terakhir AI memproses chat ini.</dd>
+            <dt>Klik nama Lead</dt><dd>Buka detail: chat, sinyal beli, catatan, tag, ubah stage.</dd>
+          </dl>
+        </div>
         <button id="refresh">Muat Ulang</button>
         <button id="logout">Keluar</button>
       </div>
@@ -37,20 +50,6 @@
 
     <main>
       <div class="risk-banner" id="riskBanner" hidden></div>
-
-      <div class="legend-box" id="legendBox">
-        <button type="button" class="legend-toggle" id="legendToggle">ⓘ Apa arti kolom-kolom ini?</button>
-        <dl class="legend-list" id="legendList" hidden>
-          <dt>Funnel Stage</dt><dd>Tahap perjalanan lead saat ini: baru → dikontak → tertarik → negosiasi → closing/hilang. Dideteksi otomatis oleh AI dari isi chat.</dd>
-          <dt>Stage Sebelumnya</dt><dd>Tahap sebelum perubahan terakhir — untuk melihat apakah lead naik atau turun tahap.</dd>
-          <dt>Skor</dt><dd>Nilai 0-100 dari AI yang menggambarkan seberapa baik kualitas percakapan/peluang closing berdasarkan transkrip chat.</dd>
-          <dt>Risiko</dt><dd>Perkiraan heuristik (bukan probabilitas statistik) seberapa perlu lead ini segera ditindaklanjuti — gabungan dari tahap funnel, skor, dan lama tidak ada balasan.</dd>
-          <dt>Catatan Analisis</dt><dd>Ringkasan pola komunikasi & cara sales menangani keberatan, ditulis otomatis oleh AI.</dd>
-          <dt>Evaluasi</dt><dd>Rekomendasi konkret dari AI untuk sales agar performanya meningkat di percakapan ini.</dd>
-          <dt>Dianalisis</dt><dd>Waktu terakhir AI memproses chat lead ini. Klik tombol "Analisis" untuk memproses ulang kalau ada chat baru.</dd>
-          <dt>Klik nama Lead</dt><dd>Membuka Halaman Detail Lead: riwayat chat penuh, sinyal beli/keberatan, catatan manual, tag, dan ubah stage cepat.</dd>
-        </dl>
-      </div>
 
       <table id="sheet">
         <thead>
@@ -168,6 +167,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

@@ -143,9 +143,11 @@ const legendToggle = document.getElementById("legendToggle");
 const legendList = document.getElementById("legendList");
 legendToggle.addEventListener("click", () => {
   legendList.hidden = !legendList.hidden;
-  legendToggle.textContent = legendList.hidden
-    ? "ⓘ Apa arti kolom-kolom ini?"
-    : "ⓘ Sembunyikan penjelasan kolom";
+});
+document.addEventListener("click", (e) => {
+  if (legendList.hidden) return;
+  if (e.target === legendToggle || legendList.contains(e.target)) return;
+  legendList.hidden = true;
 });
 
 function showAuth(message) {
