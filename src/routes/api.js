@@ -28,6 +28,7 @@ function beginPairing({ staffId, ownerId, phoneNumber, method }) {
       ownerId,
       phoneNumber,
       method,
+      fresh: true,
       onQR: (qr) => finish({ qr }),
       onPairingCode: (code) => finish({ pairing_code: code }),
       onStatus: (status) => {

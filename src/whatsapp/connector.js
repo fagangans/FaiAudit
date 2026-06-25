@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs/promises";
 import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
@@ -118,11 +119,28 @@ export async function startStaffSession({
   onPairingCode,
   onQR,
   onStatus,
+  // true hanya saat user secara eksplisit memulai/mengulang pairing lewat
+  // dashboard (POST /staff, POST /staff/:id/pair) — BUKAN saat reconnect
+  // otomatis (boot / auto-retry / endpoint /reconnect) yang harus tetap
+  // memakai creds tersimpan apa adanya.
+  fresh = false,
 }) {
   clearRetry(staffId);
   sessionParams.set(staffId, { method, phoneNumber, onPairingCode, onQR, onStatus });
 
   const sessionDir = path.resolve(process.cwd(), "wa-sessions", staffId);
+
+  // Percobaan pairing yang gagal sebelum perbaikan versi protokol bisa
+  // menyisakan creds.json/file kunci yang setengah-jadi/korup di folder ini.
+  // Soket yang dibuat di atas creds rusak gagal di tahap noise-handshake
+  // (statusCode 401 "Connection Failure") berulang-ulang, tidak peduli versi
+  // protokol sudah benar. Setiap kali user EKSPLISIT memulai pairing baru,
+  // mulai dari nol: hapus folder sesi lama dulu.
+  if (fresh) {
+    await fs.rm(sessionDir, { recursive: true, force: true });
+    logger.info({ staffId }, "menghapus sesi WA lama sebelum pairing baru");
+  }
+
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
   const version = await getWaVersion();
 
