@@ -144,11 +144,22 @@ export async function startStaffSession({
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
   const version = await getWaVersion();
 
+  // Server WhatsApp memvalidasi fingerprint browser secara berbeda untuk
+  // tiap metode pairing. Untuk QR, fingerprint Linux/Ubuntu diterima normal.
+  // Untuk flow "link with phone number" (kode pairing), fingerprint non-macOS
+  // (termasuk Ubuntu/Chrome yang dipakai sebelumnya di sini untuk SEMUA
+  // metode) sering ditolak/diam-diam timeout oleh server WA saat
+  // requestPairingCode dipanggil — inilah sebabnya QR berhasil tapi kode
+  // pairing selalu gagal. macOS Desktop adalah fingerprint paling stabil
+  // untuk flow ini menurut pengalaman komunitas Baileys.
+  const browserFingerprint =
+    method === "code" ? Browsers.macOS("Desktop") : Browsers.ubuntu("Chrome");
+
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
     version,
-    browser: Browsers.ubuntu("Chrome"),
+    browser: browserFingerprint,
     logger: waLogger,
   });
 
