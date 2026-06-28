@@ -1299,12 +1299,16 @@ function renderLeadDetail(lead) {
 
   if (lead.analysis_notes) {
     const notesP = document.createElement("p");
-    notesP.innerHTML = `<strong>Catatan analisis:</strong> ${lead.analysis_notes}`;
+    const notesLabel = document.createElement("strong");
+    notesLabel.textContent = "Catatan analisis:";
+    notesP.append(notesLabel, " " + lead.analysis_notes);
     aiCard.appendChild(notesP);
   }
   if (lead.evaluation) {
     const evalP = document.createElement("p");
-    evalP.innerHTML = `<strong>Evaluasi:</strong> ${lead.evaluation}`;
+    const evalLabel = document.createElement("strong");
+    evalLabel.textContent = "Evaluasi:";
+    evalP.append(evalLabel, " " + lead.evaluation);
     aiCard.appendChild(evalP);
   }
 

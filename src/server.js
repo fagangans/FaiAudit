@@ -38,6 +38,15 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+// Hanya percaya header X-Forwarded-For/IP kalau memang ada reverse-proxy
+// tepercaya di depan (Nginx/Cloudflare) yang sudah menimpa header itu dengan
+// IP klien asli. Tanpa flag ini, mengaktifkan trust proxy secara membabi buta
+// justru membuka celah pemalsuan IP (header X-Forwarded-For dikirim langsung
+// oleh klien) yang bisa melumpuhkan seluruh rate-limit di bawah ini.
+if (process.env.TRUST_PROXY === "1") {
+  app.set("trust proxy", 1);
+}
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
@@ -45,11 +54,26 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Lapisan pertahanan dasar terhadap flood request (DDoS application-layer)
+// untuk SEMUA endpoint /api — sebelumnya hanya /api/auth dan
+// /api/leads/:id/analyze yang dibatasi, sehingga endpoint berat seperti
+// generate PDF (PDFKit, CPU-intensif) dan pembuatan sesi WA (buka socket
+// baru) bisa dibanjiri tanpa batas oleh satu klien.
+// keyGenerator default (berbasis req.ip) dipakai apa adanya di sini karena
+// req.ownerId belum ada saat limiter ini jalan — requireOwner baru dijalankan
+// belakangan, di dalam masing-masing route handler.
+const globalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.get("/api/health", (req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
 app.use("/api/auth", authLimiter, authRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api", apiRouter);
+app.use("/api/admin", globalApiLimiter, adminRouter);
+app.use("/api", globalApiLimiter, apiRouter);
 
 const port = process.env.PORT || 3000;
 

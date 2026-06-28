@@ -54,6 +54,17 @@ const analyzeLimiter = rateLimit({
 
 const WA_NUMBER_RE = /^[1-9][0-9]{7,14}$/; // format internasional tanpa "+", mis. 62xxxxxxxxxx
 
+// PDFKit & pembuatan sesi WA (socket baru) jauh lebih berat daripada query
+// biasa — limiter global (120/menit) saja tidak cukup mencegah satu klien
+// menghabiskan CPU/socket VPS lewat endpoint ini secara spesifik.
+const heavyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ownerId || req.ip,
+});
+
 router.get("/me", requireOwner, (req, res) => {
   res.json({
     name: req.owner.name,
@@ -123,7 +134,7 @@ router.get("/staff", requireOwner, async (req, res) => {
   res.json(data);
 });
 
-router.post("/staff", requireOwner, async (req, res) => {
+router.post("/staff", requireOwner, heavyLimiter, async (req, res) => {
   const { name, wa_number } = req.body || {};
   const method = normalizeMethod(req.body?.method);
   if (!name || typeof name !== "string" || !name.trim()) {
@@ -164,7 +175,7 @@ router.post("/staff", requireOwner, async (req, res) => {
 // Mulai/ulangi pairing untuk staff yang sudah ada — dipakai untuk re-pair
 // (nomor duplikat / pairing gagal sebelumnya) dan untuk berganti metode
 // QR <-> kode tanpa membuat baris staff baru.
-router.post("/staff/:id/pair", requireOwner, async (req, res) => {
+router.post("/staff/:id/pair", requireOwner, heavyLimiter, async (req, res) => {
   const method = normalizeMethod(req.body?.method);
   const { data: staff, error: findError } = await supabase
     .from("staff")
@@ -311,7 +322,7 @@ router.get("/leads/:id", requireOwner, async (req, res) => {
 // Download laporan PDF lengkap satu lead (info, ringkasan AI, evaluasi,
 // sinyal beli/keberatan, catatan manual, dan transkrip chat penuh) — dipakai
 // owner untuk dokumentasi/arsip di luar dashboard.
-router.get("/leads/:id/pdf", requireOwner, async (req, res) => {
+router.get("/leads/:id/pdf", requireOwner, heavyLimiter, async (req, res) => {
   const detail = await loadLeadDetail(req.params.id, req.ownerId);
   if (detail.error) return res.status(400).json({ error: detail.error });
   if (detail.notFound) return res.status(404).json({ error: "Lead tidak ditemukan" });
@@ -334,7 +345,7 @@ router.get("/leads/:id/pdf", requireOwner, async (req, res) => {
 // HARI KEMARIN dikirim otomatis oleh scheduler ke WA pribadi owner — bukan
 // lewat endpoint ini — supaya tidak rancu dengan apa yang dilihat di
 // dashboard saat ini juga.
-router.get("/reports/daily/pdf", requireOwner, async (req, res) => {
+router.get("/reports/daily/pdf", requireOwner, heavyLimiter, async (req, res) => {
   try {
     const range = todayRangeWIB();
     const data = await buildDailyReportData(req.ownerId, req.owner.business_name, range);
@@ -428,7 +439,7 @@ router.post("/leads/:id/analyze", requireOwner, analyzeLimiter, async (req, res)
 // Sambungkan ulang staff yang creds-nya sudah ada (tidak perlu pairing code
 // baru) — dipakai kalau auto-retry di connector.js sudah mencapai batas
 // maksimum dan berhenti otomatis (lihat MAX_ATTEMPTS di connector.js).
-router.post("/staff/:id/reconnect", requireOwner, async (req, res) => {
+router.post("/staff/:id/reconnect", requireOwner, heavyLimiter, async (req, res) => {
   const { data: staff, error: findError } = await supabase
     .from("staff")
     .select("id, owner_id")
