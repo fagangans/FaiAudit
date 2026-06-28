@@ -262,6 +262,19 @@ function riskBadge(risk) {
   return span;
 }
 
+// Render pesan error secara AMAN ke sebuah container: kosongkan lalu pasang
+// <p class="error"> dengan textContent, tidak pernah innerHTML — supaya teks
+// error dari server (yang bisa saja memuat nilai input) tidak pernah ditafsir
+// sebagai HTML/JS oleh browser.
+function showErrorIn(el, message) {
+  if (!el) return;
+  el.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "error";
+  p.textContent = message || "Terjadi kesalahan";
+  el.appendChild(p);
+}
+
 // data-label dipakai CSS (td::before) untuk tampilan "card" di mobile —
 // setiap sel data perlu tahu nama kolomnya sendiri karena <thead> disembunyikan
 // secara visual pada breakpoint sempit.
@@ -526,7 +539,7 @@ async function loadKanban() {
   }
   const rows = await res.json();
   if (!res.ok) {
-    kanbanBoard.innerHTML = `<p class="error">${rows.error || "Gagal memuat data"}</p>`;
+    showErrorIn(kanbanBoard, rows.error || "Gagal memuat data");
     return;
   }
   renderKanban(rows);
@@ -663,7 +676,7 @@ async function loadAnalytics() {
   }
   const rows = await res.json();
   if (!res.ok) {
-    analyticsGrid.innerHTML = `<p class="error">${rows.error || "Gagal memuat data"}</p>`;
+    showErrorIn(analyticsGrid, rows.error || "Gagal memuat data");
     return;
   }
   renderAnalytics(rows);
@@ -838,7 +851,7 @@ function renderPairing(result, staffId) {
   area.innerHTML = "";
 
   if (result.error) {
-    area.innerHTML = `<p class="error">${result.error}</p>`;
+    showErrorIn(area, result.error);
     return;
   }
   if (result.connected) {
@@ -969,7 +982,7 @@ function openAddSalesModal() {
         });
         const d2 = await r2.json();
         if (!r2.ok) {
-          area.innerHTML = `<p class="error">${d2.error || "Gagal"}</p>`;
+          showErrorIn(area, d2.error || "Gagal");
           return;
         }
         renderPairing(d2, data.staff_id);
@@ -1251,7 +1264,7 @@ async function openLeadDetail(leadId) {
   const res = await apiFetch(`/api/leads/${leadId}`);
   const data = await res.json();
   if (!res.ok) {
-    leadModalContent.innerHTML = `<p class="error">${data.error || "Gagal memuat lead"}</p>`;
+    showErrorIn(leadModalContent, data.error || "Gagal memuat lead");
     return;
   }
   renderLeadDetail(data);
