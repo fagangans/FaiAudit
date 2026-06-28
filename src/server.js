@@ -76,10 +76,15 @@ app.use("/api/admin", globalApiLimiter, adminRouter);
 app.use("/api", globalApiLimiter, apiRouter);
 
 const port = process.env.PORT || 3000;
+// Saat di belakang reverse proxy (Nginx), set HOST=127.0.0.1 supaya Node hanya
+// bisa diakses dari localhost — lapisan kedua kalau aturan firewall port ini
+// salah/terlewat, server tetap tidak terekspos langsung ke internet. Default
+// tetap mendengarkan di semua interface untuk akses langsung saat dev/awal.
+const host = process.env.HOST || "0.0.0.0";
 
 bootstrapMasterAccount().finally(() => {
-  app.listen(port, () => {
-    logger.info({ port }, "FaiAudit dashboard berjalan");
+  app.listen(port, host, () => {
+    logger.info({ port, host }, "FaiAudit dashboard berjalan");
     // Sambungkan ulang sesi WA staff yang sudah pernah pairing — tanpa ini,
     // setiap restart server diam-diam menghentikan audit sampai staff dihapus
     // dan ditambahkan ulang manual.
