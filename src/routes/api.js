@@ -334,7 +334,7 @@ router.get("/leads/:id/pdf", requireOwner, heavyLimiter, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-${safeName}.pdf"`);
     res.send(buffer);
   } catch (err) {
-    res.status(500).json({ error: "Gagal membuat PDF: " + err.message });
+    res.status(500).json({ error: "Gagal membuat PDF, silakan coba lagi" });
   }
 });
 
@@ -354,7 +354,7 @@ router.get("/reports/daily/pdf", requireOwner, heavyLimiter, async (req, res) =>
     res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-HariIni-${data.dateLabel}.pdf"`);
     res.send(buffer);
   } catch (err) {
-    res.status(500).json({ error: "Gagal membuat laporan harian: " + err.message });
+    res.status(500).json({ error: "Gagal membuat laporan, silakan coba lagi" });
   }
 });
 
@@ -432,7 +432,7 @@ router.post("/leads/:id/analyze", requireOwner, analyzeLimiter, async (req, res)
     const result = await analyzeLead(lead.id);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Analisis gagal, silakan coba lagi" });
   }
 });
 
@@ -452,6 +452,6 @@ router.post("/staff/:id/reconnect", requireOwner, heavyLimiter, async (req, res)
     await startStaffSession({ staffId: staff.id, ownerId: staff.owner_id, phoneNumber: null });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: `Gagal menyambungkan ulang: ${err.message}` });
+    res.status(500).json({ error: "Gagal menyambungkan ulang, silakan coba lagi" });
   }
 });
