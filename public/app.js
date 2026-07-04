@@ -254,6 +254,36 @@ FUNNEL_STAGES.forEach((s) => {
   filterStage.appendChild(opt);
 });
 
+// Score Gauge: arc SVG yang menampilkan skor 0-100 tanpa perlu baca angka —
+// dipakai di header kartu AI pada modal detail lead, menggantikan teks
+// polos "Skor: 72". Radius/lingkar dihitung manual (bukan lib chart) supaya
+// tidak menambah dependency baru.
+function scoreGauge(score) {
+  const wrap = document.createElement("div");
+  wrap.className = "score-gauge";
+
+  const hasScore = typeof score === "number";
+  const pct = hasScore ? Math.max(0, Math.min(100, score)) : 0;
+  const r = 24;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - pct / 100);
+
+  const tone = !hasScore ? "" : pct < 40 ? "gauge-danger" : pct < 70 ? "gauge-warn" : "";
+
+  wrap.innerHTML = `
+    <svg viewBox="0 0 56 56">
+      <circle class="score-gauge-track" cx="28" cy="28" r="${r}"></circle>
+      <circle class="score-gauge-fill ${tone}" cx="28" cy="28" r="${r}"
+        stroke-dasharray="${circumference}" stroke-dashoffset="${hasScore ? offset : circumference}"></circle>
+    </svg>
+    <div>
+      <div class="score-gauge-value">${hasScore ? score : "-"}</div>
+      <div class="score-gauge-label">AI Score</div>
+    </div>
+  `;
+  return wrap;
+}
+
 function riskBadge(risk) {
   const span = document.createElement("span");
   const level = risk?.level || "rendah";
@@ -1359,12 +1389,9 @@ function renderLeadDetail(lead) {
 
   const aiHeader = document.createElement("div");
   aiHeader.className = "ai-card-header";
+  aiHeader.appendChild(scoreGauge(lead.score));
   aiHeader.appendChild(riskBadge(lead.risk));
   aiHeader.appendChild(stageBadge(lead.funnel_stage));
-  const scoreSpan = document.createElement("span");
-  scoreSpan.className = "ai-score";
-  scoreSpan.textContent = lead.score != null ? `Skor: ${lead.score}` : "Skor: -";
-  aiHeader.appendChild(scoreSpan);
   aiCard.appendChild(aiHeader);
 
   if (lead.risk?.reason) {
