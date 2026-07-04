@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=22" />
+  <link rel="stylesheet" href="style.css?v=23" />
 </head>
 <body>
   <section id="authView" class="auth-card">
@@ -22,201 +22,221 @@
     </form>
   </section>
 
-  <div id="appView" hidden>
-    <header>
-      <h1><span class="mark">Fai</span>Audit</h1>
-      <nav class="main-nav">
-        <button type="button" class="nav-link" data-view="app">Dashboard</button>
-        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
-        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
-        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
-        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
-      </nav>
-      <div class="toolbar">
-        <button id="refresh">Muat Ulang</button>
-        <button id="logout">Keluar</button>
-      </div>
-    </header>
-
-    <main>
-      <div class="dashboard-topbar">
-        <div class="filter-bar">
-          <input type="search" id="filterSearch" placeholder="Cari nama lead..." />
-          <select id="filterStage">
-            <option value="">Semua Stage</option>
-          </select>
-          <select id="filterRisk">
-            <option value="">Semua Risiko</option>
-            <option value="tinggi">Tinggi</option>
-            <option value="sedang">Sedang</option>
-            <option value="rendah">Rendah</option>
-            <option value="selesai">Selesai</option>
-          </select>
-          <button type="button" id="exportCsv">Export CSV</button>
-          <button type="button" id="downloadDailyPdf">⬇ Laporan Hari Ini (PDF)</button>
+  <div class="shell" id="shell" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="brand-mark">
+          <rect x="2" y="2" width="20" height="20" rx="5" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M7 12.5l3 3 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <div class="brand-name"><span class="mark">Fai</span>Audit</div>
+          <div class="brand-sub">Sales Intelligence</div>
         </div>
-        <div class="legend-wrap">
-          <button type="button" class="legend-toggle" id="legendToggle" aria-label="Penjelasan kolom" aria-expanded="false">ⓘ Apa arti kolom ini?</button>
-          <dl class="legend-list" id="legendList" hidden>
-            <dt>Funnel Stage</dt><dd>Tahap lead saat ini (baru → kontak → tertarik → negosiasi → closing/hilang), dideteksi AI.</dd>
-            <dt>Stage Sebelumnya</dt><dd>Tahap sebelum perubahan terakhir.</dd>
-            <dt>Skor</dt><dd>Nilai 0-100 kualitas percakapan dari AI.</dd>
-            <dt>Risiko</dt><dd>Heuristik seberapa urgent ditindaklanjuti.</dd>
-            <dt>Catatan Analisis</dt><dd>Ringkasan pola chat & objection handling.</dd>
-            <dt>Evaluasi</dt><dd>Rekomendasi AI untuk sales.</dd>
-            <dt>Dianalisis</dt><dd>Waktu terakhir AI memproses chat ini.</dd>
-            <dt>Klik nama Lead</dt><dd>Buka detail: chat, sinyal beli, catatan, tag, ubah stage.</dd>
-          </dl>
+        <button type="button" class="btn-collapse" id="collapseBtn" title="Tutup sidebar">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <nav class="main-nav">
+        <button type="button" class="nav-link" data-view="app">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="3" width="8" height="5" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="10" width="8" height="11" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.7"/></svg></span>
+          <span class="nav-label">Dashboard</span>
+        </button>
+        <button type="button" class="nav-link" data-view="kanban">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="5.5" height="18" rx="1.3" stroke="currentColor" stroke-width="1.7"/><rect x="9.3" y="3" width="5.5" height="11" rx="1.3" stroke="currentColor" stroke-width="1.7"/><rect x="15.5" y="3" width="5.5" height="14" rx="1.3" stroke="currentColor" stroke-width="1.7"/></svg></span>
+          <span class="nav-label">Kanban</span>
+        </button>
+        <button type="button" class="nav-link" data-view="analytics">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M3 20V4M3 20h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.5 16l4-5 3 3 5.5-7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="nav-label">Analitik</span>
+        </button>
+        <div class="nav-divider"></div>
+        <button type="button" class="nav-link" data-view="sales">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="7.5" r="3.2" stroke="currentColor" stroke-width="1.7"/><path d="M3 20c0-3.6 2.7-6 6-6s6 2.4 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 4.5c1.7.3 3 1.9 3 3.7s-1.3 3.4-3 3.7M19 14.2c1.8.5 3 2.1 3 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          <span class="nav-label">Kelola Sales</span>
+        </button>
+        <button type="button" class="nav-link" data-view="settings">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          <span class="nav-label">Pengaturan</span>
+        </button>
+
+        <button type="button" class="rail-expand" id="expandBtn" title="Buka sidebar">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" id="logout" class="btn-logout" title="Keluar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="nav-label">Keluar</span>
+        </button>
+      </div>
+      <!-- Elemen legacy tetap ada di DOM (tidak tampil) supaya listener app.js yang lama tidak error -->
+      <div style="display:none">
+        <button id="logoutSettings"></button>
+        <button id="logoutKanban"></button>
+        <button id="logoutAnalytics"></button>
+        <button id="logoutSales"></button>
+      </div>
+    </aside>
+
+    <div class="content">
+
+      <div id="appView" class="view-panel">
+        <div class="content-header">
+          <span class="content-title">Dashboard</span>
+          <div class="spacer"></div>
+          <button type="button" id="refresh" class="btn">Muat Ulang</button>
+        </div>
+        <div class="content-body">
+          <div class="dashboard-topbar">
+            <div class="filter-bar">
+              <input type="search" id="filterSearch" placeholder="Cari nama lead..." />
+              <select id="filterStage">
+                <option value="">Semua Stage</option>
+              </select>
+              <select id="filterRisk">
+                <option value="">Semua Risiko</option>
+                <option value="tinggi">Tinggi</option>
+                <option value="sedang">Sedang</option>
+                <option value="rendah">Rendah</option>
+                <option value="selesai">Selesai</option>
+              </select>
+              <button type="button" id="exportCsv">Export CSV</button>
+              <button type="button" id="downloadDailyPdf" class="btn-primary">Laporan Hari Ini (PDF)</button>
+            </div>
+            <div class="legend-wrap">
+              <button type="button" class="legend-toggle" id="legendToggle" aria-label="Penjelasan kolom" aria-expanded="false">Apa arti kolom ini?</button>
+              <dl class="legend-list" id="legendList" hidden>
+                <dt>Funnel Stage</dt><dd>Tahap lead saat ini (baru → kontak → tertarik → negosiasi → closing/hilang), dideteksi AI.</dd>
+                <dt>Stage Sebelumnya</dt><dd>Tahap sebelum perubahan terakhir.</dd>
+                <dt>Skor</dt><dd>Nilai 0-100 kualitas percakapan dari AI.</dd>
+                <dt>Risiko</dt><dd>Heuristik seberapa urgent ditindaklanjuti.</dd>
+                <dt>Catatan Analisis</dt><dd>Ringkasan pola chat & objection handling.</dd>
+                <dt>Evaluasi</dt><dd>Rekomendasi AI untuk sales.</dd>
+                <dt>Dianalisis</dt><dd>Waktu terakhir AI memproses chat ini.</dd>
+                <dt>Klik nama Lead</dt><dd>Buka detail: chat, sinyal beli, catatan, tag, ubah stage.</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="risk-banner" id="riskBanner" hidden></div>
+
+          <div class="table-wrap">
+            <table id="sheet">
+              <thead>
+                <tr>
+                  <th>Sales</th>
+                  <th>Lead</th>
+                  <th>Status WA</th>
+                  <th>Stage Sebelumnya</th>
+                  <th>Funnel Stage</th>
+                  <th>Skor</th>
+                  <th>Risiko</th>
+                  <th>Catatan Analisis</th>
+                  <th>Evaluasi</th>
+                  <th>Dianalisis</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="sheetBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div class="risk-banner" id="riskBanner" hidden></div>
-
-      <table id="sheet">
-        <thead>
-          <tr>
-            <th>Sales</th>
-            <th>Lead</th>
-            <th>Status WA</th>
-            <th>Stage Sebelumnya</th>
-            <th>Funnel Stage</th>
-            <th>Skor</th>
-            <th>Risiko</th>
-            <th>Catatan Analisis</th>
-            <th>Evaluasi</th>
-            <th>Dianalisis</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="sheetBody"></tbody>
-      </table>
-    </main>
-  </div>
-
-  <div id="salesView" hidden>
-    <header>
-      <h1><span class="mark">Fai</span>Audit — Kelola Sales</h1>
-      <nav class="main-nav">
-        <button type="button" class="nav-link" data-view="app">Dashboard</button>
-        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
-        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
-        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
-        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
-      </nav>
-      <div class="toolbar">
-        <button id="addStaffSalesPage" class="primary">+ Tambah Sales</button>
-        <button id="logoutSales">Keluar</button>
-      </div>
-    </header>
-    <main>
-      <table id="staffTable">
-        <thead>
-          <tr><th>Nama</th><th>Nomor WA</th><th>Status</th><th>Terhubung Sejak</th><th></th></tr>
-        </thead>
-        <tbody id="staffTableBody"></tbody>
-      </table>
-    </main>
-  </div>
-
-  <div id="kanbanView" hidden>
-    <header>
-      <h1><span class="mark">Fai</span>Audit — Kanban</h1>
-      <nav class="main-nav">
-        <button type="button" class="nav-link" data-view="app">Dashboard</button>
-        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
-        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
-        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
-        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
-      </nav>
-      <div class="toolbar">
-        <button id="logoutKanban">Keluar</button>
-      </div>
-    </header>
-    <main>
-      <p class="hint">Geser kartu lead antar kolom untuk mengubah funnel stage secara cepat.</p>
-      <div class="kanban-board" id="kanbanBoard"></div>
-    </main>
-  </div>
-
-  <div id="analyticsView" hidden>
-    <header>
-      <h1><span class="mark">Fai</span>Audit — Analitik</h1>
-      <nav class="main-nav">
-        <button type="button" class="nav-link" data-view="app">Dashboard</button>
-        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
-        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
-        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
-        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
-      </nav>
-      <div class="toolbar">
-        <button id="logoutAnalytics">Keluar</button>
-      </div>
-    </header>
-    <main>
-      <div class="analytics-grid" id="analyticsGrid"></div>
-    </main>
-  </div>
-
-  <div id="settingsView" hidden>
-    <header>
-      <h1><span class="mark">Fai</span>Audit — Pengaturan</h1>
-      <nav class="main-nav">
-        <button type="button" class="nav-link" data-view="app">Dashboard</button>
-        <button type="button" class="nav-link" data-view="kanban">Kanban</button>
-        <button type="button" class="nav-link" data-view="analytics">Analitik</button>
-        <button type="button" class="nav-link" data-view="sales">Kelola Sales</button>
-        <button type="button" class="nav-link" data-view="settings">Pengaturan</button>
-      </nav>
-      <div class="toolbar">
-        <button id="logoutSettings">Keluar</button>
-      </div>
-    </header>
-    <main>
-      <div class="settings-panel">
-        <h2>Ganti Password</h2>
-        <form id="passwordForm">
-          <input id="currentPassword" type="password" placeholder="Password saat ini" autocomplete="current-password" required />
-          <input id="newPassword" type="password" placeholder="Password baru (min. 8 karakter)" autocomplete="new-password" required minlength="8" />
-          <button type="submit">Ganti Password</button>
-        </form>
-        <p id="passwordError" class="error"></p>
-        <p id="passwordSuccess" class="success" hidden>Password berhasil diganti.</p>
+      <div id="salesView" class="view-panel" hidden>
+        <div class="content-header">
+          <span class="content-title">Kelola Sales</span>
+          <div class="spacer"></div>
+          <button type="button" id="addStaffSalesPage" class="btn-primary">+ Tambah Sales</button>
+        </div>
+        <div class="content-body">
+          <div class="table-wrap">
+            <table id="staffTable">
+              <thead>
+                <tr><th>Nama</th><th>Nomor WA</th><th>Status</th><th>Terhubung Sejak</th><th></th></tr>
+              </thead>
+              <tbody id="staffTableBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div class="settings-panel">
-        <h2>Reminder Lead Berisiko Tinggi via WA</h2>
-        <p class="hint">Nomor WA pribadi Anda akan menerima pesan ringkasan (maks. 1x/hari) kalau ada lead "risiko tinggi". Pesan dikirim lewat sesi WA staff yang sedang terhubung.</p>
-        <form id="notifyForm">
-          <input id="notifyNumber" placeholder="Nomor WA, format 62812xxxxxxx (kosongkan untuk nonaktif)" />
-          <button type="submit">Simpan</button>
-        </form>
-        <p id="notifyError" class="error"></p>
-        <p id="notifySuccess" class="success" hidden>Tersimpan.</p>
+      <div id="kanbanView" class="view-panel" hidden>
+        <div class="content-header">
+          <span class="content-title">Kanban</span>
+          <div class="spacer"></div>
+          <span class="hint">Geser kartu lead antar kolom untuk mengubah funnel stage secara cepat.</span>
+        </div>
+        <div class="content-body">
+          <div class="kanban-board" id="kanbanBoard"></div>
+        </div>
       </div>
 
-      <div class="settings-panel" id="clientPanel">
-        <h2>Daftarkan Client Baru</h2>
-        <form id="clientForm">
-          <input id="clientName" placeholder="Nama client/bisnis" required />
-          <input id="clientEmail" type="email" placeholder="Email client" required />
-          <input id="clientBusiness" placeholder="Nama usaha (opsional)" />
-          <input id="clientPlan" placeholder="Plan (opsional, mis. trial/pro)" />
-          <button type="submit">Daftarkan Client</button>
-        </form>
-        <p id="clientError" class="error"></p>
-
-        <p class="hint">Provider AI hanya bisa diatur master untuk tiap client (OpenRouter = kualitas lebih tinggi, AI Biasa/Cepat = default hemat biaya).</p>
-
-        <h2>Daftar Client</h2>
-        <table id="clientTable">
-          <thead>
-            <tr><th>Nama</th><th>Usaha</th><th>Plan</th><th>Provider AI</th><th>Terdaftar</th><th></th></tr>
-          </thead>
-          <tbody id="clientTableBody"></tbody>
-        </table>
+      <div id="analyticsView" class="view-panel" hidden>
+        <div class="content-header">
+          <span class="content-title">Analitik</span>
+        </div>
+        <div class="content-body">
+          <div class="analytics-grid" id="analyticsGrid"></div>
+        </div>
       </div>
-    </main>
-  </div>
+
+      <div id="settingsView" class="view-panel" hidden>
+        <div class="content-header">
+          <span class="content-title">Pengaturan</span>
+        </div>
+        <div class="content-body">
+          <div class="settings-panel">
+            <h2>Ganti Password</h2>
+            <form id="passwordForm">
+              <input id="currentPassword" type="password" placeholder="Password saat ini" autocomplete="current-password" required />
+              <input id="newPassword" type="password" placeholder="Password baru (min. 8 karakter)" autocomplete="new-password" required minlength="8" />
+              <button type="submit">Ganti Password</button>
+            </form>
+            <p id="passwordError" class="error"></p>
+            <p id="passwordSuccess" class="success" hidden>Password berhasil diganti.</p>
+          </div>
+
+          <div class="settings-panel">
+            <h2>Reminder Lead Berisiko Tinggi via WA</h2>
+            <p class="hint">Nomor WA pribadi Anda akan menerima pesan ringkasan (maks. 1x/hari) kalau ada lead "risiko tinggi". Pesan dikirim lewat sesi WA staff yang sedang terhubung.</p>
+            <form id="notifyForm">
+              <input id="notifyNumber" placeholder="Nomor WA, format 62812xxxxxxx (kosongkan untuk nonaktif)" />
+              <button type="submit">Simpan</button>
+            </form>
+            <p id="notifyError" class="error"></p>
+            <p id="notifySuccess" class="success" hidden>Tersimpan.</p>
+          </div>
+
+          <div class="settings-panel" id="clientPanel">
+            <h2>Daftarkan Client Baru</h2>
+            <form id="clientForm">
+              <input id="clientName" placeholder="Nama client/bisnis" required />
+              <input id="clientEmail" type="email" placeholder="Email client" required />
+              <input id="clientBusiness" placeholder="Nama usaha (opsional)" />
+              <input id="clientPlan" placeholder="Plan (opsional, mis. trial/pro)" />
+              <button type="submit">Daftarkan Client</button>
+            </form>
+            <p id="clientError" class="error"></p>
+
+            <p class="hint">Provider AI hanya bisa diatur master untuk tiap client (OpenRouter = kualitas lebih tinggi, AI Biasa/Cepat = default hemat biaya).</p>
+
+            <h2>Daftar Client</h2>
+            <table id="clientTable">
+              <thead>
+                <tr><th>Nama</th><th>Usaha</th><th>Plan</th><th>Provider AI</th><th>Terdaftar</th><th></th></tr>
+              </thead>
+              <tbody id="clientTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /shell -->
 
   <div id="modalOverlay" class="modal-overlay" hidden>
     <div class="modal">
@@ -234,7 +254,7 @@
 
   <aside id="introCard" class="intro-card" hidden>
     <button type="button" class="intro-close" id="introClose" aria-label="Tutup">×</button>
-    <h3>👋 Tentang FaiAudit</h3>
+    <h3>Tentang FaiAudit</h3>
     <ul>
       <li>Tabel di atas menampilkan audit otomatis dari chat WhatsApp sales Anda.</li>
       <li><strong>+ Tambah Sales</strong> — hubungkan nomor WA staff lewat QR/kode pairing.</li>
@@ -242,6 +262,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
