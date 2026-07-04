@@ -578,11 +578,18 @@ function renderKanban(rows) {
       });
       card.appendChild(nameEl);
 
-      const meta = document.createElement("div");
+      const metaRow = document.createElement("div");
+      metaRow.className = "kanban-card-row";
+      const meta = document.createElement("span");
       meta.className = "kanban-card-meta";
       meta.textContent = r.staff_name || "-";
-      card.appendChild(meta);
+      const score = document.createElement("span");
+      score.className = "kanban-card-score" + (r.risk?.level === "tinggi" ? " kanban-card-score-danger" : "");
+      score.textContent = typeof r.score === "number" ? r.score : "—";
+      metaRow.append(meta, score);
+      card.appendChild(metaRow);
       card.appendChild(riskBadge(r.risk));
+      if (r.risk?.level === "tinggi") card.classList.add("kanban-card-risk-high");
 
       card.addEventListener("dragstart", (e) => {
         e.dataTransfer.setData("text/plain", String(r.lead_id));
