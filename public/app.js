@@ -858,7 +858,7 @@ async function loadAnalytics() {
 // Kartu ringkas di atas Analitik: total lead, win rate, risiko tinggi, skor
 // rata-rata — semua dihitung dari data dashboard yang sudah ada, tanpa
 // query/endpoint baru.
-function statCard(label, value, tone) {
+function statCard(label, value, tone, sparkValues) {
   const card = document.createElement("div");
   card.className = "stat-card" + (tone === "accent" ? " accent" : "");
   const l = document.createElement("div");
@@ -868,7 +868,50 @@ function statCard(label, value, tone) {
   v.className = "stat-value" + (tone === "danger" ? " stat-danger" : tone === "accent" ? " stat-accent" : "");
   v.textContent = value;
   card.append(l, v);
+  if (sparkValues?.length) card.appendChild(sparkline(sparkValues, tone === "danger"));
   return card;
+}
+
+// Sparkline 7 hari: tren KASAR jumlah lead yang dianalisis AI per hari,
+// dihitung dari `analyzed_at` yang sudah ada di data dashboard — BUKAN tren
+// skor harian (itu butuh snapshot historis yang tidak kita simpan). Jujur
+// menampilkan "aktivitas analisis", bukan pura-pura presisi skor per hari.
+function sparkline(values, danger) {
+  const width = 100;
+  const height = 24;
+  const max = Math.max(1, ...values);
+  const stepX = width / (values.length - 1 || 1);
+  const points = values.map((v, i) => [i * stepX, height - (v / max) * (height - 4) - 2]);
+  const path = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const [lastX, lastY] = points[points.length - 1];
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "stat-spark");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", height);
+  svg.innerHTML = `
+    <path class="stat-spark-line${danger ? " spark-danger" : ""}" d="${path}"></path>
+    <circle class="stat-spark-dot${danger ? " spark-danger" : ""}" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2"></circle>
+  `;
+  return svg;
+}
+
+// Hitung jumlah lead per hari (7 hari terakhir) berdasarkan `analyzed_at`.
+function last7DaysCounts(rows, dateField) {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  const counts = Object.fromEntries(days.map((d) => [d, 0]));
+  for (const r of rows) {
+    const raw = r[dateField];
+    if (!raw) continue;
+    const day = new Date(raw).toISOString().slice(0, 10);
+    if (day in counts) counts[day] += 1;
+  }
+  return days.map((d) => counts[d]);
 }
 
 function renderAnalytics(rows) {
@@ -883,11 +926,12 @@ function renderAnalytics(rows) {
   const riskTinggiCount = rows.filter((r) => r.risk?.level === "tinggi").length;
   const scored = rows.filter((r) => typeof r.score === "number");
   const avgScore = scored.length ? Math.round(scored.reduce((sum, r) => sum + r.score, 0) / scored.length) : null;
+  const analyzedTrend = last7DaysCounts(rows, "analyzed_at");
   statGrid.append(
     statCard("Total Lead", String(rows.length)),
     statCard("Win Rate", `${winRate}%`, "accent"),
     statCard("Risiko Tinggi", String(riskTinggiCount), riskTinggiCount ? "danger" : undefined),
-    statCard("Skor Rata-rata", avgScore != null ? String(avgScore) : "-"),
+    statCard("Analisis / 7 Hari", String(analyzedTrend.reduce((a, b) => a + b, 0)), undefined, analyzedTrend),
   );
   analyticsGrid.appendChild(statGrid);
 
