@@ -286,35 +286,60 @@ function cell(text, label) {
   return td;
 }
 
-// Reminder leads berisiko tinggi (heuristik: stage lanjut + lama tanpa
-// balasan) supaya tidak terkubur di tabel besar — pakai data risk yang
-// sudah dihitung backend, tidak ada query/AI call tambahan.
+// Panel Notifikasi Risiko: widget floating (bukan banner statis) yang
+// muncul selama ada lead risiko tinggi — pakai data risk yang sudah
+// dihitung backend, tidak ada query/AI call tambahan. Bisa ditutup untuk
+// sesi ini saja (dismiss per browser tab); muncul lagi kalau data di-reload
+// dan risikonya masih ada, supaya tidak diam-diam terlupakan.
+const RISK_PANEL_DISMISS_KEY = "faiaudit_risk_panel_dismissed_at";
+
 function renderRiskBanner(rows) {
   const highRisk = rows.filter((r) => r.risk?.level === "tinggi");
+  riskBanner.innerHTML = "";
+
   if (!highRisk.length) {
     riskBanner.hidden = true;
-    riskBanner.innerHTML = "";
+    return;
+  }
+  if (sessionStorage.getItem(RISK_PANEL_DISMISS_KEY) === "1") {
+    riskBanner.hidden = true;
     return;
   }
 
   riskBanner.hidden = false;
-  riskBanner.innerHTML = "";
-  const title = document.createElement("strong");
-  title.textContent = `⚠️ ${highRisk.length} lead berisiko tinggi butuh tindak lanjut segera`;
-  riskBanner.appendChild(title);
+
+  const head = document.createElement("div");
+  head.className = "risk-panel-head";
+  head.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3l10 18H2L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10v4M12 17.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  const headText = document.createElement("span");
+  headText.textContent = `${highRisk.length} lead risiko tinggi`;
+  head.appendChild(headText);
+  const dismissBtn = document.createElement("button");
+  dismissBtn.type = "button";
+  dismissBtn.className = "risk-panel-dismiss";
+  dismissBtn.setAttribute("aria-label", "Tutup untuk sesi ini");
+  dismissBtn.textContent = "×";
+  dismissBtn.addEventListener("click", () => {
+    sessionStorage.setItem(RISK_PANEL_DISMISS_KEY, "1");
+    riskBanner.hidden = true;
+  });
+  head.appendChild(dismissBtn);
+  riskBanner.appendChild(head);
 
   const list = document.createElement("ul");
-  for (const r of highRisk.slice(0, 5)) {
+  list.className = "risk-panel-list";
+  for (const r of highRisk.slice(0, 8)) {
     const li = document.createElement("li");
-    const link = document.createElement("a");
-    link.href = "#";
-    link.textContent = `${r.lead_name || "-"} (${r.staff_name || "-"})`;
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      openLeadDetail(r.lead_id);
-    });
-    li.appendChild(link);
-    li.append(` — ${r.risk.reason}`);
+    li.className = "risk-panel-item";
+    const name = document.createElement("div");
+    name.className = "risk-panel-item-name";
+    name.textContent = `${r.lead_name || "-"} — ${r.staff_name || "-"}`;
+    const reason = document.createElement("div");
+    reason.className = "risk-panel-item-reason";
+    reason.textContent = r.risk.reason || "";
+    li.append(name, reason);
+    li.addEventListener("click", () => openLeadDetail(r.lead_id));
     list.appendChild(li);
   }
   riskBanner.appendChild(list);
