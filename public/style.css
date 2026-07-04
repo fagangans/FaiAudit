@@ -189,17 +189,54 @@ body {
 }
 .btn-primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
 
+/* ---- Panel Notifikasi Risiko (widget, bukan banner statis) ---- */
 .risk-banner {
-  background: rgba(192, 57, 43, 0.07);
-  border: 1px solid rgba(192, 57, 43, 0.25);
+  position: fixed;
+  top: 78px;
+  right: 22px;
+  width: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
   border-radius: 9px;
-  padding: 12px 16px;
-  margin-bottom: 14px;
+  box-shadow: 0 12px 32px rgba(10, 26, 48, 0.16);
+  padding: 0;
+  z-index: 60;
+}
+.risk-banner[hidden] { display: none; }
+.risk-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 700;
   color: #93312a;
 }
-.risk-banner ul { margin: 8px 0 0; padding-left: 20px; }
-.risk-banner li { margin-bottom: 4px; }
-.risk-banner a { color: var(--danger); text-decoration: underline; }
+.risk-panel-head svg { width: 15px; height: 15px; flex-shrink: 0; }
+.risk-panel-dismiss {
+  margin-left: auto;
+  border: none;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.risk-panel-dismiss:hover { color: var(--navy-900); }
+.risk-panel-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.risk-panel-item {
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.risk-panel-item:hover { background: var(--surface-alt); }
+.risk-panel-item-name { font-size: 12.5px; font-weight: 600; color: var(--navy-900); }
+.risk-panel-item-reason { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
 
 .legend-wrap { position: relative; }
 .legend-toggle {
@@ -770,6 +807,7 @@ tbody tr:hover td { background: var(--surface-alt); }
   .modal-overlay { padding: 12px; }
 
   .intro-card { left: 12px; right: 12px; bottom: 12px; width: auto; }
+  .risk-banner { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-height: 40vh; }
 
   /* ---- Tabel data jadi tampilan "card" bertumpuk ---- */
   #sheet, #staffTable, #clientTable, .leaderboard-table {
