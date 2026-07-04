@@ -564,9 +564,19 @@ tbody tr:hover td { background: var(--surface-alt); }
   font-size: 13px;
   line-height: 1.5;
 }
-.ai-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.ai-card-header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; flex-wrap: wrap; }
 .ai-score { font-family: var(--mono); font-size: 12px; color: var(--navy-700); font-weight: 700; }
 .ai-card p { margin: 6px 0; }
+
+/* ---- Score Gauge — arc yang menunjukkan skor 0-100 tanpa perlu baca angka ---- */
+.score-gauge { display: flex; align-items: center; gap: 10px; }
+.score-gauge svg { width: 56px; height: 56px; flex-shrink: 0; transform: rotate(-90deg); }
+.score-gauge-track { fill: none; stroke: var(--surface-alt); stroke-width: 6; }
+.score-gauge-fill { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
+.score-gauge-fill.gauge-danger { stroke: var(--danger); }
+.score-gauge-fill.gauge-warn { stroke: #b08a3e; }
+.score-gauge-value { font-family: var(--mono); font-size: 15px; font-weight: 700; }
+.score-gauge-label { font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 1px; }
 
 .chip-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .chip-row-label { font-size: 12px; color: var(--text-muted); margin-right: 2px; }
