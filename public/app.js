@@ -715,10 +715,41 @@ async function loadAnalytics() {
   renderAnalytics(rows);
 }
 
+// Kartu ringkas di atas Analitik: total lead, win rate, risiko tinggi, skor
+// rata-rata — semua dihitung dari data dashboard yang sudah ada, tanpa
+// query/endpoint baru.
+function statCard(label, value, tone) {
+  const card = document.createElement("div");
+  card.className = "stat-card" + (tone === "accent" ? " accent" : "");
+  const l = document.createElement("div");
+  l.className = "stat-label";
+  l.textContent = label;
+  const v = document.createElement("div");
+  v.className = "stat-value" + (tone === "danger" ? " stat-danger" : tone === "accent" ? " stat-accent" : "");
+  v.textContent = value;
+  card.append(l, v);
+  return card;
+}
+
 function renderAnalytics(rows) {
   analyticsGrid.innerHTML = "";
 
   const total = rows.length || 1;
+
+  const statGrid = document.createElement("div");
+  statGrid.className = "stat-grid";
+  const winCount = rows.filter((r) => r.funnel_stage === "closed_won").length;
+  const winRate = rows.length ? Math.round((winCount / rows.length) * 100) : 0;
+  const riskTinggiCount = rows.filter((r) => r.risk?.level === "tinggi").length;
+  const scored = rows.filter((r) => typeof r.score === "number");
+  const avgScore = scored.length ? Math.round(scored.reduce((sum, r) => sum + r.score, 0) / scored.length) : null;
+  statGrid.append(
+    statCard("Total Lead", String(rows.length)),
+    statCard("Win Rate", `${winRate}%`, "accent"),
+    statCard("Risiko Tinggi", String(riskTinggiCount), riskTinggiCount ? "danger" : undefined),
+    statCard("Skor Rata-rata", avgScore != null ? String(avgScore) : "-"),
+  );
+  analyticsGrid.appendChild(statGrid);
 
   const stageCounts = FUNNEL_STAGES.map((s) => ({
     label: STAGE_LABEL[s] || s,
