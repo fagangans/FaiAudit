@@ -790,6 +790,11 @@ tbody tr:hover td { background: var(--surface-alt); }
 .stat-value { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--navy-900); line-height: 1; }
 .stat-value.stat-danger { color: var(--danger); }
 .stat-value.stat-accent { color: var(--accent); }
+.stat-spark { margin-top: 6px; display: block; }
+.stat-spark-line { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.stat-spark-line.spark-danger { stroke: var(--danger); }
+.stat-spark-dot { fill: var(--accent); }
+.stat-spark-dot.spark-danger { fill: var(--danger); }
 
 .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .analytics-card {
