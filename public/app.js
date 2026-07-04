@@ -97,6 +97,7 @@ async function apiFetch(url, options = {}) {
 
 function showView(view) {
   authView.hidden = view !== "auth";
+  document.getElementById("shell").hidden = view === "auth";
   appView.hidden = view !== "app";
   salesView.hidden = view !== "sales";
   settingsView.hidden = view !== "settings";
@@ -1548,5 +1549,21 @@ async function restoreSession() {
     maybeShowIntro();
   }
 }
+
+// ---- Sidebar collapse/expand (redesain: rail ikon saat ditutup) ----
+(function initSidebarCollapse() {
+  const shellEl = document.getElementById("shell");
+  const collapseBtn = document.getElementById("collapseBtn");
+  const expandBtn = document.getElementById("expandBtn");
+  if (!shellEl || !collapseBtn || !expandBtn) return;
+  const KEY = "faiaudit_sidebar_collapsed";
+  function setCollapsed(state) {
+    shellEl.classList.toggle("sidebar-collapsed", state);
+    localStorage.setItem(KEY, state ? "1" : "0");
+  }
+  collapseBtn.addEventListener("click", () => setCollapsed(true));
+  expandBtn.addEventListener("click", () => setCollapsed(false));
+  if (localStorage.getItem(KEY) === "1") setCollapsed(true);
+})();
 
 restoreSession();
