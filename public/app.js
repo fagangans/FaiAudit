@@ -469,8 +469,118 @@ function renderDashboardRows(rows) {
     actionTd.appendChild(btn);
     tr.appendChild(actionTd);
 
+    // Klik baris (bukan link nama / tombol aksi) buka Quick Preview di kanan —
+    // ringkasan cepat tanpa harus buka modal detail penuh. Klik nama tetap
+    // membuka modal lengkap seperti sebelumnya (lihat leadLink di atas).
+    tr.addEventListener("click", (e) => {
+      if (e.target.closest("a, button")) return;
+      openQuickPreview(r);
+    });
+
     sheetBody.appendChild(tr);
   }
+}
+
+// ---- Quick Preview Panel (rekomendasi #7) ----
+const quickPreview = document.getElementById("quickPreview");
+const quickPreviewBody = document.getElementById("quickPreviewBody");
+const quickPreviewClose = document.getElementById("quickPreviewClose");
+
+function closeQuickPreview() {
+  quickPreview.hidden = true;
+}
+quickPreviewClose.addEventListener("click", closeQuickPreview);
+
+function openQuickPreview(r) {
+  quickPreviewBody.innerHTML = "";
+
+  const name = document.createElement("div");
+  name.className = "quick-preview-name";
+  name.textContent = r.lead_name || "-";
+  const phone = document.createElement("div");
+  phone.className = "quick-preview-phone";
+  phone.textContent = r.wa_jid || "";
+
+  const badgeRow = document.createElement("div");
+  badgeRow.className = "quick-preview-row";
+  badgeRow.append(stageBadge(r.funnel_stage), riskBadge(r.risk));
+
+  quickPreviewBody.append(name, phone, badgeRow);
+
+  const fields = [
+    ["Sales", r.staff_name || "-"],
+    ["Skor AI", typeof r.score === "number" ? String(r.score) : "-"],
+    ["Terakhir dianalisis", r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "Belum"],
+  ];
+  for (const [label, value] of fields) {
+    const field = document.createElement("div");
+    field.className = "quick-preview-field";
+    const l = document.createElement("div");
+    l.className = "quick-preview-label";
+    l.textContent = label;
+    const v = document.createElement("div");
+    v.className = "quick-preview-value";
+    v.textContent = value;
+    field.append(l, v);
+    quickPreviewBody.appendChild(field);
+  }
+
+  if (r.analysis_notes) {
+    const noteField = document.createElement("div");
+    noteField.className = "quick-preview-field";
+    const l = document.createElement("div");
+    l.className = "quick-preview-label";
+    l.textContent = "Catatan AI";
+    const note = document.createElement("div");
+    note.className = "quick-preview-note";
+    note.textContent = r.analysis_notes;
+    noteField.append(l, note);
+    quickPreviewBody.appendChild(noteField);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "quick-preview-actions";
+
+  const detailBtn = document.createElement("button");
+  detailBtn.type = "button";
+  detailBtn.className = "qp-primary";
+  detailBtn.textContent = "Buka Detail Lengkap";
+  detailBtn.addEventListener("click", () => {
+    closeQuickPreview();
+    openLeadDetail(r.lead_id);
+  });
+
+  const analyzeBtn = document.createElement("button");
+  analyzeBtn.type = "button";
+  analyzeBtn.textContent = "Analisis Ulang";
+  analyzeBtn.addEventListener("click", async () => {
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Memproses…";
+    try {
+      const res = await apiFetch(`/api/leads/${r.lead_id}/analyze`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal analisis");
+        return;
+      }
+      if (data.skipped) alert("Belum ada chat baru sejak analisis terakhir.");
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = "Analisis Ulang";
+      closeQuickPreview();
+      await loadDashboard();
+    }
+  });
+
+  const pdfBtn = document.createElement("button");
+  pdfBtn.type = "button";
+  pdfBtn.textContent = "Unduh PDF";
+  pdfBtn.addEventListener("click", () => downloadAuthedFile(`/api/leads/${r.lead_id}/pdf`, pdfBtn));
+
+  actions.append(detailBtn, analyzeBtn, pdfBtn);
+  quickPreviewBody.appendChild(actions);
+
+  quickPreview.hidden = false;
 }
 
 function applyDashboardFilters() {
