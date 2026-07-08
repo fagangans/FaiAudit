@@ -249,10 +249,14 @@ router.get("/dashboard", requireOwner, async (req, res) => {
       staff_name: lead.staff?.name,
       wa_status: lead.staff?.wa_session_status,
       funnel_stage,
-      previous_stage: lead.lead_audits?.previous_stage || "-",
-      score: lead.lead_audits?.score ?? "-",
-      analysis_notes: lead.lead_audits?.analysis_notes || "-",
-      evaluation: lead.lead_audits?.evaluation || "-",
+      // Kosong (belum ada stage sebelumnya/belum dianalisis) dikirim apa
+      // adanya (null/"") — bukan string "-" — supaya frontend & CSV bisa
+      // menampilkan teks yang jelas ("Belum dianalisis" dsb), bukan tanda
+      // baca ambigu.
+      previous_stage: lead.lead_audits?.previous_stage || null,
+      score: lead.lead_audits?.score ?? null,
+      analysis_notes: lead.lead_audits?.analysis_notes || "",
+      evaluation: lead.lead_audits?.evaluation || "",
       analyzed_at: lead.lead_audits?.analyzed_at || null,
       tags: lead.tags || [],
       risk: computeLeadRisk({ funnel_stage, score: lead.lead_audits?.score, last_message_at: lead.last_message_at }),
@@ -297,7 +301,7 @@ async function loadLeadDetail(leadId, ownerId) {
     owner_note: lead.owner_note || "",
     tags: lead.tags || [],
     funnel_stage,
-    previous_stage: lead.lead_audits?.previous_stage || "-",
+    previous_stage: lead.lead_audits?.previous_stage || null,
     score: lead.lead_audits?.score ?? null,
     analysis_notes: lead.lead_audits?.analysis_notes || "",
     evaluation: lead.lead_audits?.evaluation || "",
