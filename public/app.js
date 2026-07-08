@@ -277,7 +277,7 @@ function scoreGauge(score) {
         stroke-dasharray="${circumference}" stroke-dashoffset="${hasScore ? offset : circumference}"></circle>
     </svg>
     <div>
-      <div class="score-gauge-value">${hasScore ? score : "-"}</div>
+      <div class="score-gauge-value">${hasScore ? score : "Belum"}</div>
       <div class="score-gauge-label">AI Score</div>
     </div>
   `;
@@ -311,7 +311,7 @@ function showErrorIn(el, message) {
 // secara visual pada breakpoint sempit.
 function cell(text, label) {
   const td = document.createElement("td");
-  td.textContent = text ?? "-";
+  td.textContent = text || text === 0 ? text : "Belum ada";
   if (label) td.dataset.label = label;
   return td;
 }
@@ -364,7 +364,7 @@ function renderRiskBanner(rows) {
     li.className = "risk-panel-item";
     const name = document.createElement("div");
     name.className = "risk-panel-item-name";
-    name.textContent = `${r.lead_name || "-"} — ${r.staff_name || "-"}`;
+    name.textContent = `${r.lead_name || "Lead tanpa nama"} · ${r.staff_name || "Tanpa sales"}`;
     const reason = document.createElement("div");
     reason.className = "risk-panel-item-reason";
     reason.textContent = r.risk.reason || "";
@@ -411,7 +411,7 @@ function renderDashboardRows(rows) {
     const leadLink = document.createElement("a");
     leadLink.href = "#";
     leadLink.className = "lead-link";
-    leadLink.textContent = r.lead_name || "-";
+    leadLink.textContent = r.lead_name || "Lead tanpa nama";
     leadLink.addEventListener("click", (e) => {
       e.preventDefault();
       openLeadDetail(r.lead_id);
@@ -426,7 +426,7 @@ function renderDashboardRows(rows) {
     stageTd.appendChild(stageBadge(r.funnel_stage));
     tr.appendChild(stageTd);
 
-    tr.append(cell(r.score, "Skor"));
+    tr.append(cell(typeof r.score === "number" ? r.score : "Belum dinilai", "Skor"));
 
     const riskTd = document.createElement("td");
     riskTd.dataset.label = "Risiko";
@@ -434,9 +434,9 @@ function renderDashboardRows(rows) {
     tr.appendChild(riskTd);
 
     tr.append(
-      cell(r.analysis_notes, "Catatan Analisis"),
-      cell(r.evaluation, "Evaluasi"),
-      cell(r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "-", "Dianalisis"),
+      cell(r.analysis_notes || "Belum dianalisis", "Catatan Analisis"),
+      cell(r.evaluation || "Belum dianalisis", "Evaluasi"),
+      cell(r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "Belum dianalisis", "Dianalisis"),
     );
 
     const actionTd = document.createElement("td");
@@ -496,7 +496,7 @@ function openQuickPreview(r) {
 
   const name = document.createElement("div");
   name.className = "quick-preview-name";
-  name.textContent = r.lead_name || "-";
+  name.textContent = r.lead_name || "Lead tanpa nama";
   const phone = document.createElement("div");
   phone.className = "quick-preview-phone";
   phone.textContent = r.wa_jid || "";
@@ -508,8 +508,8 @@ function openQuickPreview(r) {
   quickPreviewBody.append(name, phone, badgeRow);
 
   const fields = [
-    ["Sales", r.staff_name || "-"],
-    ["Skor AI", typeof r.score === "number" ? String(r.score) : "-"],
+    ["Sales", r.staff_name || "Belum ada"],
+    ["Skor AI", typeof r.score === "number" ? String(r.score) : "Belum dinilai"],
     ["Terakhir dianalisis", r.analyzed_at ? new Date(r.analyzed_at).toLocaleString("id-ID") : "Belum"],
   ];
   for (const [label, value] of fields) {
@@ -736,7 +736,7 @@ function renderKanban(rows) {
       const nameEl = document.createElement("a");
       nameEl.href = "#";
       nameEl.className = "kanban-card-name";
-      nameEl.textContent = r.lead_name || "-";
+      nameEl.textContent = r.lead_name || "Lead tanpa nama";
       nameEl.addEventListener("click", (e) => {
         e.preventDefault();
         openLeadDetail(r.lead_id);
@@ -747,10 +747,10 @@ function renderKanban(rows) {
       metaRow.className = "kanban-card-row";
       const meta = document.createElement("span");
       meta.className = "kanban-card-meta";
-      meta.textContent = r.staff_name || "-";
+      meta.textContent = r.staff_name || "Belum ada";
       const score = document.createElement("span");
       score.className = "kanban-card-score" + (r.risk?.level === "tinggi" ? " kanban-card-score-danger" : "");
-      score.textContent = typeof r.score === "number" ? r.score : "—";
+      score.textContent = typeof r.score === "number" ? r.score : "Belum dinilai";
       metaRow.append(meta, score);
       card.appendChild(metaRow);
       card.appendChild(riskBadge(r.risk));
@@ -954,7 +954,7 @@ function renderAnalytics(rows) {
   // data dashboard yang sudah ada — tanpa query/endpoint baru.
   const bySales = new Map();
   for (const r of rows) {
-    const name = r.staff_name || "-";
+    const name = r.staff_name || "Tanpa sales";
     const entry = bySales.get(name) || { total: 0, scoreSum: 0, scoreCount: 0, closedWon: 0 };
     entry.total += 1;
     if (typeof r.score === "number") {
@@ -994,7 +994,7 @@ function renderAnalytics(rows) {
       tr.append(
         cell(entry.name, "Sales"),
         cell(entry.total, "Total Lead"),
-        cell(entry.avgScore ?? "-", "Skor Rata-rata"),
+        cell(entry.avgScore ?? "Belum dinilai", "Skor Rata-rata"),
         cell(entry.closedWon, "Closing"),
       );
       tbody.appendChild(tr);
@@ -1255,7 +1255,7 @@ document.getElementById("logoutSales").addEventListener("click", logout);
 
 function staffCell(text, label) {
   const td = document.createElement("td");
-  td.textContent = text ?? "-";
+  td.textContent = text || text === 0 ? text : "Belum ada";
   if (label) td.dataset.label = label;
   return td;
 }
@@ -1334,7 +1334,7 @@ async function loadStaff() {
 
 function clientCell(text, label) {
   const td = document.createElement("td");
-  td.textContent = text ?? "-";
+  td.textContent = text || text === 0 ? text : "Belum ada";
   if (label) td.dataset.label = label;
   return td;
 }
@@ -1440,7 +1440,7 @@ function showClientCreated(data) {
   const p = document.createElement("p");
   p.className = "hint";
   p.textContent =
-    "Salin & sampaikan kredensial ini ke client. Password hanya ditampilkan sekali — setelah modal ditutup tidak bisa dilihat lagi.";
+    "Salin & sampaikan kredensial ini ke client. Password hanya ditampilkan sekali, setelah modal ditutup tidak bisa dilihat lagi.";
   modalContent.append(
     h,
     p,
@@ -1527,7 +1527,7 @@ function renderLeadDetail(lead) {
 
   const sub = document.createElement("p");
   sub.className = "hint";
-  sub.textContent = `Sales: ${lead.staff_name || "-"} · WA: ${lead.wa_jid || "-"} · Status: ${lead.wa_status || "-"}`;
+  sub.textContent = `Sales: ${lead.staff_name || "Belum ada"} · WA: ${lead.wa_jid || "Belum ada"} · Status: ${lead.wa_status || "Belum ada"}`;
   leadModalContent.appendChild(sub);
 
   const pdfBtn = document.createElement("button");
