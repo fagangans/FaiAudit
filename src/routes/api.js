@@ -6,6 +6,7 @@ import { analyzeLead, computeLeadRisk, FUNNEL_STAGES } from "../ai/analyze.js";
 import { requireOwner } from "../middleware/requireOwner.js";
 import { buildLeadPdfBuffer, buildDailyReportPdfBuffer } from "../reports/pdfBuilder.js";
 import { buildDailyReportData, todayRangeWIB } from "../reports/dailyReportData.js";
+import { logger } from "../logger.js";
 
 export const router = express.Router();
 
@@ -338,6 +339,7 @@ router.get("/leads/:id/pdf", requireOwner, heavyLimiter, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-${safeName}.pdf"`);
     res.send(buffer);
   } catch (err) {
+    logger.error({ err, leadId: req.params.id }, "Gagal membuat PDF lead");
     res.status(500).json({ error: "Gagal membuat PDF, silakan coba lagi" });
   }
 });
@@ -358,6 +360,7 @@ router.get("/reports/daily/pdf", requireOwner, heavyLimiter, async (req, res) =>
     res.setHeader("Content-Disposition", `attachment; filename="FaiAudit-Laporan-HariIni-${data.dateLabel}.pdf"`);
     res.send(buffer);
   } catch (err) {
+    logger.error({ err, ownerId: req.ownerId }, "Gagal membuat laporan harian");
     res.status(500).json({ error: "Gagal membuat laporan, silakan coba lagi" });
   }
 });
@@ -436,6 +439,10 @@ router.post("/leads/:id/analyze", requireOwner, analyzeLimiter, async (req, res)
     const result = await analyzeLead(lead.id);
     res.json(result);
   } catch (err) {
+    // Log error ASLI (mis. provider AI gagal/format respons berubah/JSON
+    // tidak valid) ke PM2 log — pesan ke user tetap generik supaya tidak
+    // membocorkan detail internal, tapi kita perlu jejak untuk diagnosis.
+    logger.error({ err, leadId: req.params.id }, "Analisis lead gagal");
     res.status(500).json({ error: "Analisis gagal, silakan coba lagi" });
   }
 });
@@ -456,6 +463,7 @@ router.post("/staff/:id/reconnect", requireOwner, heavyLimiter, async (req, res)
     await startStaffSession({ staffId: staff.id, ownerId: staff.owner_id, phoneNumber: null });
     res.json({ ok: true });
   } catch (err) {
+    logger.error({ err, staffId: req.params.id }, "Gagal menyambungkan ulang staff");
     res.status(500).json({ error: "Gagal menyambungkan ulang, silakan coba lagi" });
   }
 });
