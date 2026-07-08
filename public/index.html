@@ -4,22 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=23" />
+  <link rel="stylesheet" href="style.css?v=24" />
 </head>
 <body>
-  <section id="authView" class="auth-card">
-    <div class="brand">
-      <h1>FaiAudit</h1>
-      <span>Sales Performance Intelligence</span>
+  <section id="authView" class="auth-page">
+    <div class="auth-hero">
+      <span class="auth-hero-badge">Sales Intelligence</span>
+      <h1>Pantau &amp; <span class="accent">Tingkatkan</span> Performa Sales Anda</h1>
+      <p>FaiAudit menganalisis setiap percakapan WhatsApp sales secara otomatis — funnel stage, skor, dan risiko lead, semua dalam satu dashboard.</p>
     </div>
-    <form id="authForm">
-      <input id="authEmail" type="email" placeholder="Email" required autocomplete="username" />
-      <input id="authPassword" type="password" placeholder="Password" required autocomplete="current-password" />
-      <div class="auth-actions">
-        <button type="submit">Masuk</button>
+    <div class="auth-card">
+      <div class="brand">
+        <h2>Masuk ke Akun</h2>
+        <span>Gunakan email &amp; password yang terdaftar</span>
       </div>
-      <p id="authError" class="error"></p>
-    </form>
+      <form id="authForm">
+        <input id="authEmail" type="email" placeholder="Email" required autocomplete="username" />
+        <input id="authPassword" type="password" placeholder="Password" required autocomplete="current-password" />
+        <div class="auth-actions">
+          <button type="submit">Masuk</button>
+        </div>
+        <p id="authError" class="error"></p>
+      </form>
+    </div>
   </section>
 
   <div class="shell" id="shell" hidden>
@@ -270,6 +277,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=23"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>
