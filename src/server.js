@@ -1,4 +1,5 @@
 import "dotenv/config";
+import dns from "node:dns";
 import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -13,6 +14,14 @@ import { startAutoAnalyzeScheduler } from "./ai/scheduler.js";
 import { startRiskReminderScheduler } from "./notify/reminderScheduler.js";
 import { startDailyReportScheduler } from "./notify/dailyReportScheduler.js";
 import { logger } from "./logger.js";
+
+// Banyak VPS punya rute IPv6 yang "setengah jalan" (DNS balikin AAAA record,
+// tapi paket keluar lewat IPv6 tidak sampai) — Node lalu mencoba IPv6 dulu,
+// menggantung sampai timeout, baru gagal total tanpa sempat coba IPv4 yang
+// sebetulnya jalan normal. Ini menyebabkan fetch() ke domain eksternal
+// (provider AI, dll) gagal dengan ETIMEDOUT walau domain itu sendiri sehat.
+// Memaksa urutan resolusi IPv4 dulu menghindari jebakan ini secara global.
+dns.setDefaultResultOrder("ipv4first");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
