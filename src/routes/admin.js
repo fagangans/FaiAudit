@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import { supabase } from "../supabase.js";
 import { requireOwner } from "../middleware/requireOwner.js";
+import { logger } from "../logger.js";
 
 export const router = express.Router();
 
@@ -47,6 +48,10 @@ router.patch("/clients/:id/ai-provider", async (req, res) => {
     .maybeSingle();
   if (error) return res.status(400).json({ error: error.message });
   if (!data) return res.status(404).json({ error: "Client tidak ditemukan" });
+  logger.info(
+    { event: "admin.client_update", actor_id: req.owner?.id, actor_email: req.user?.email, client_id: data.id, ai_provider },
+    "Admin updated client ai_provider"
+  );
   res.json(data);
 });
 
@@ -82,6 +87,11 @@ router.post("/clients", async (req, res) => {
     return res.status(400).json({ error: ownerError.message });
   }
 
+  logger.info(
+    { event: "admin.client_create", actor_id: req.owner?.id, actor_email: req.user?.email, client_id: owner.id, client_email: email },
+    "Admin created client"
+  );
+
   res.json({ ...owner, email, temp_password: tempPassword });
 });
 
@@ -97,5 +107,9 @@ router.delete("/clients/:id", async (req, res) => {
   const { error } = await supabase.from("owners").delete().eq("id", owner.id);
   if (error) return res.status(400).json({ error: error.message });
   await supabase.auth.admin.deleteUser(owner.user_id);
+  logger.info(
+    { event: "admin.client_delete", actor_id: req.owner?.id, actor_email: req.user?.email, client_id: owner.id },
+    "Admin deleted client"
+  );
   res.json({ ok: true });
 });

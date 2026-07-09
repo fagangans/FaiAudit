@@ -1,5 +1,6 @@
 import express from "express";
 import { supabaseAuth } from "../supabase.js";
+import { logger } from "../logger.js";
 
 export const router = express.Router();
 
@@ -17,7 +18,12 @@ router.post("/login", async (req, res) => {
   }
 
   const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
-  if (error) return res.status(401).json({ error: "Email atau password salah" });
+  if (error) {
+    logger.warn({ event: "auth.login_failed", email }, "Login attempt failed");
+    return res.status(401).json({ error: "Email atau password salah" });
+  }
+
+  logger.info({ event: "auth.login_success", email, user_id: data.user?.id }, "Login successful");
 
   res.json({
     access_token: data.session.access_token,
