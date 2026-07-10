@@ -8,11 +8,13 @@ import { fileURLToPath } from "node:url";
 import { router as apiRouter } from "./routes/api.js";
 import { router as authRouter } from "./routes/auth.js";
 import { router as adminRouter } from "./routes/admin.js";
+import { router as monitoringRouter, ingestRouter as monitoringIngestRouter } from "./routes/monitoring.js";
 import { bootstrapMasterAccount } from "./bootstrapMaster.js";
 import { reconnectAllStaffSessions } from "./whatsapp/connector.js";
 import { startAutoAnalyzeScheduler } from "./ai/scheduler.js";
 import { startRiskReminderScheduler } from "./notify/reminderScheduler.js";
 import { startDailyReportScheduler } from "./notify/dailyReportScheduler.js";
+import { startUptimeChecker } from "./monitoring/uptimeChecker.js";
 import { logger } from "./logger.js";
 
 // Banyak VPS punya rute IPv6 yang "setengah jalan" (DNS balikin AAAA record,
@@ -82,6 +84,10 @@ app.get("/api/health", (req, res) => res.json({ ok: true, uptime: process.uptime
 
 app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/admin", globalApiLimiter, adminRouter);
+app.use("/api/admin/monitoring", globalApiLimiter, monitoringRouter);
+// Terpisah dari /api/admin: dipakai skrip audit terjadwal lewat token statis
+// (MONITOR_INGEST_TOKEN), bukan sesi browser owner — lihat routes/monitoring.js.
+app.use("/api/monitoring-ingest", authLimiter, monitoringIngestRouter);
 app.use("/api", globalApiLimiter, apiRouter);
 
 const port = process.env.PORT || 3000;
@@ -101,6 +107,7 @@ bootstrapMasterAccount().finally(() => {
     startAutoAnalyzeScheduler();
     startRiskReminderScheduler();
     startDailyReportScheduler();
+    startUptimeChecker();
   });
 });
 

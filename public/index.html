@@ -67,6 +67,10 @@
           <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
           <span class="nav-label">Pengaturan</span>
         </button>
+        <button type="button" class="nav-link" data-view="monitoring" id="navMonitoring" hidden>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="nav-label">Monitoring</span>
+        </button>
 
         <button type="button" class="rail-expand" id="expandBtn" title="Buka sidebar">
           <svg viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -238,6 +242,47 @@
               </thead>
               <tbody id="clientTableBody"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="monitoringView" class="view-panel" hidden>
+        <div class="content-header">
+          <span class="content-title">Monitoring Web Fagan</span>
+          <div class="spacer"></div>
+          <button type="button" id="refreshMonitoring" class="btn">Muat Ulang</button>
+        </div>
+        <div class="content-body">
+          <div class="settings-panel">
+            <h2>Status Uptime (24 jam terakhir)</h2>
+            <table id="uptimeTable">
+              <thead>
+                <tr><th>Web</th><th>Status</th><th>Response</th><th>Uptime 24h</th><th>Dicek Terakhir</th></tr>
+              </thead>
+              <tbody id="uptimeTableBody"></tbody>
+            </table>
+          </div>
+
+          <div class="settings-panel">
+            <h2>Status Keamanan (OWASP Top 10)</h2>
+            <p class="hint">Diperbarui otomatis oleh audit terjadwal. Klik nama web untuk lihat detail temuan.</p>
+            <table id="securityTable">
+              <thead>
+                <tr><th>Web</th><th>Risiko</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th></tr>
+              </thead>
+              <tbody id="securityTableBody"></tbody>
+            </table>
+          </div>
+
+          <div class="settings-panel" id="monitorTargetPanel">
+            <h2>Tambah / Kelola Target</h2>
+            <form id="monitorTargetForm">
+              <input id="monitorTargetName" placeholder="Nama web" required />
+              <input id="monitorTargetUrl" type="url" placeholder="https://domain-webnya.com" required />
+              <button type="submit">Simpan Target</button>
+            </form>
+            <p id="monitorTargetError" class="error"></p>
+            <p class="hint">Kalau nama sudah ada di daftar di atas (dari 8 project awal), gunakan nama yang persis sama supaya URL-nya ter-update, bukan bikin baris baru.</p>
           </div>
         </div>
       </div>

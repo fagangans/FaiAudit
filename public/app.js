@@ -4,6 +4,12 @@ const salesView = document.getElementById("salesView");
 const settingsView = document.getElementById("settingsView");
 const kanbanView = document.getElementById("kanbanView");
 const analyticsView = document.getElementById("analyticsView");
+const monitoringView = document.getElementById("monitoringView");
+const navMonitoring = document.getElementById("navMonitoring");
+const uptimeTableBody = document.getElementById("uptimeTableBody");
+const securityTableBody = document.getElementById("securityTableBody");
+const monitorTargetForm = document.getElementById("monitorTargetForm");
+const monitorTargetError = document.getElementById("monitorTargetError");
 const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
@@ -103,9 +109,10 @@ function showView(view) {
   settingsView.hidden = view !== "settings";
   kanbanView.hidden = view !== "kanban";
   analyticsView.hidden = view !== "analytics";
+  monitoringView.hidden = view !== "monitoring";
   // Ingat halaman terakhir supaya reload (Ctrl+R) / restart server tidak
   // melempar user kembali ke dashboard. Layar auth tidak disimpan.
-  if (view === "app" || view === "sales" || view === "settings" || view === "kanban" || view === "analytics") {
+  if (["app", "sales", "settings", "kanban", "analytics", "monitoring"].includes(view)) {
     localStorage.setItem("faiaudit_view", view);
   }
   document.querySelectorAll(".nav-link").forEach((btn) => {
@@ -123,6 +130,7 @@ async function goToView(view) {
   if (view === "settings") return showSettings();
   if (view === "kanban") return showKanban();
   if (view === "analytics") return showAnalytics();
+  if (view === "monitoring") return showMonitoring();
 }
 
 async function showApp() {
@@ -192,6 +200,7 @@ async function loadMe() {
   if (!res.ok) return;
   const me = await res.json();
   clientPanel.hidden = !me.is_master;
+  navMonitoring.hidden = !me.is_master;
 }
 
 authForm.addEventListener("submit", async (event) => {
@@ -1772,6 +1781,7 @@ async function restoreSession() {
   }
   const me = await res.json();
   clientPanel.hidden = !me.is_master;
+  navMonitoring.hidden = !me.is_master;
 
   const lastView = localStorage.getItem("faiaudit_view");
   if (lastView === "settings") {
@@ -1787,12 +1797,125 @@ async function restoreSession() {
   } else if (lastView === "analytics") {
     showView("analytics");
     await loadAnalytics();
+  } else if (lastView === "monitoring" && me.is_master) {
+    await showMonitoring();
   } else {
     showView("app");
     await loadDashboard();
     maybeShowIntro();
   }
 }
+
+// ---- Monitoring: uptime + keamanan seluruh web Fagan (master-only) ----
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function loadUptimeSummary() {
+  const res = await apiFetch("/api/admin/monitoring/uptime/summary");
+  uptimeTableBody.innerHTML = "";
+  if (!res.ok) {
+    uptimeTableBody.innerHTML = `<tr><td colspan="5">Gagal memuat status uptime.</td></tr>`;
+    return;
+  }
+  const rows = await res.json();
+  if (!rows.length) {
+    uptimeTableBody.innerHTML = `<tr><td colspan="5">Belum ada target.</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const statusLabel = !r.url
+      ? '<span class="badge">Belum ada URL</span>'
+      : r.latest_status === "up"
+        ? '<span class="badge badge-success">Up</span>'
+        : r.latest_status === "down"
+          ? '<span class="badge badge-danger">Down</span>'
+          : '<span class="badge">Belum dicek</span>';
+    tr.innerHTML = `
+      <td>${escapeHtml(r.name)}</td>
+      <td>${statusLabel}</td>
+      <td>${r.latest_response_ms != null ? r.latest_response_ms + " ms" : "-"}</td>
+      <td>${r.uptime_pct_24h != null ? r.uptime_pct_24h + "%" : "-"}</td>
+      <td>${fmtDateTime(r.latest_checked_at)}</td>
+    `;
+    uptimeTableBody.appendChild(tr);
+  }
+}
+
+async function loadSecuritySummary() {
+  const res = await apiFetch("/api/admin/monitoring/security/summary");
+  securityTableBody.innerHTML = "";
+  if (!res.ok) {
+    securityTableBody.innerHTML = `<tr><td colspan="6">Gagal memuat status keamanan.</td></tr>`;
+    return;
+  }
+  const rows = await res.json();
+  if (!rows.length) {
+    securityTableBody.innerHTML = `<tr><td colspan="6">Belum ada target.</td></tr>`;
+    return;
+  }
+  const riskBadge = { critical: "badge-danger", high: "badge-danger", medium: "badge-warning", low: "badge-success" };
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.name)}</td>
+      <td><span class="badge ${riskBadge[r.risk_level] || ""}">${escapeHtml(r.risk_level)}</span></td>
+      <td>${r.counts.critical || 0}</td>
+      <td>${r.counts.high || 0}</td>
+      <td>${r.counts.medium || 0}</td>
+      <td>${r.counts.low || 0}</td>
+    `;
+    if (r.findings?.length) {
+      tr.style.cursor = "pointer";
+      tr.title = "Klik untuk lihat detail temuan";
+      tr.addEventListener("click", () => {
+        modalContent.innerHTML = `
+          <h2>${escapeHtml(r.name)} — Temuan Keamanan Terbuka</h2>
+          <ul class="legend-list" style="display:block">
+            ${r.findings
+              .map(
+                (f) => `<li style="margin-bottom:10px"><strong>[${escapeHtml(f.severity)}] ${escapeHtml(f.owasp_category)}</strong><br/>${escapeHtml(f.summary)}${f.file_ref ? `<br/><code>${escapeHtml(f.file_ref)}</code>` : ""}</li>`,
+              )
+              .join("")}
+          </ul>
+        `;
+        modalOverlay.hidden = false;
+      });
+    }
+    securityTableBody.appendChild(tr);
+  }
+}
+
+async function showMonitoring() {
+  showView("monitoring");
+  await Promise.all([loadUptimeSummary(), loadSecuritySummary()]);
+}
+
+document.getElementById("refreshMonitoring")?.addEventListener("click", showMonitoring);
+
+monitorTargetForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  monitorTargetError.textContent = "";
+  const name = document.getElementById("monitorTargetName").value.trim();
+  const url = document.getElementById("monitorTargetUrl").value.trim();
+  const res = await apiFetch("/api/admin/monitoring/targets", {
+    method: "POST",
+    body: JSON.stringify({ name, url }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    monitorTargetError.textContent = body.error || "Gagal menyimpan target.";
+    return;
+  }
+  monitorTargetForm.reset();
+  await loadUptimeSummary();
+});
 
 // ---- Sidebar collapse/expand (redesain: rail ikon saat ditutup) ----
 (function initSidebarCollapse() {
