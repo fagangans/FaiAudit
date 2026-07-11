@@ -8,7 +8,11 @@ import { fileURLToPath } from "node:url";
 import { router as apiRouter } from "./routes/api.js";
 import { router as authRouter } from "./routes/auth.js";
 import { router as adminRouter } from "./routes/admin.js";
-import { router as monitoringRouter, ingestRouter as monitoringIngestRouter } from "./routes/monitoring.js";
+import {
+  router as monitoringRouter,
+  ingestRouter as monitoringIngestRouter,
+  pageviewRouter as monitoringPageviewRouter,
+} from "./routes/monitoring.js";
 import { bootstrapMasterAccount } from "./bootstrapMaster.js";
 import { reconnectAllStaffSessions } from "./whatsapp/connector.js";
 import { startAutoAnalyzeScheduler } from "./ai/scheduler.js";
@@ -88,6 +92,27 @@ app.use("/api/admin/monitoring", globalApiLimiter, monitoringRouter);
 // Terpisah dari /api/admin: dipakai skrip audit terjadwal lewat token statis
 // (MONITOR_INGEST_TOKEN), bukan sesi browser owner — lihat routes/monitoring.js.
 app.use("/api/monitoring-ingest", authLimiter, monitoringIngestRouter);
+
+// Endpoint traffic-beacon dipanggil lintas-origin langsung dari browser
+// pengunjung 4 website lain (domain berbeda dari FaiAudit sendiri), jadi
+// butuh CORS terbuka — tapi HANYA untuk path ini, bukan seluruh /api. Tidak
+// pakai cookie/kredensial apa pun di sini, jadi wildcard origin aman (data
+// yang masuk memang best-effort analytics publik, lihat routes/monitoring.js).
+const pageviewLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/monitoring-beacon", (req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+});
+app.use("/api/monitoring-beacon", pageviewLimiter, monitoringPageviewRouter);
+
 app.use("/api", globalApiLimiter, apiRouter);
 
 const port = process.env.PORT || 3000;

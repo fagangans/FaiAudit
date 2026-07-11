@@ -10,6 +10,7 @@ const uptimeTableBody = document.getElementById("uptimeTableBody");
 const securityTableBody = document.getElementById("securityTableBody");
 const monitorTargetForm = document.getElementById("monitorTargetForm");
 const monitorTargetError = document.getElementById("monitorTargetError");
+const trafficCards = document.getElementById("trafficCards");
 const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
@@ -1892,9 +1893,69 @@ async function loadSecuritySummary() {
   }
 }
 
+function miniList(title, entries) {
+  const wrap = document.createElement("div");
+  const h4 = document.createElement("h4");
+  h4.textContent = title;
+  h4.style.margin = "10px 0 4px";
+  wrap.appendChild(h4);
+  const ul = document.createElement("ul");
+  ul.className = "analytics-list";
+  if (!entries?.length) {
+    const li = document.createElement("li");
+    li.textContent = "Belum ada data";
+    ul.appendChild(li);
+  } else {
+    for (const e of entries) {
+      const li = document.createElement("li");
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = escapeHtml(e.value);
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "analytics-value";
+      valueSpan.textContent = String(e.count);
+      li.append(labelSpan, valueSpan);
+      ul.appendChild(li);
+    }
+  }
+  wrap.appendChild(ul);
+  return wrap;
+}
+
+async function loadTrafficSummary() {
+  trafficCards.innerHTML = "";
+  const res = await apiFetch("/api/admin/monitoring/traffic/summary?days=7");
+  if (!res.ok) {
+    trafficCards.innerHTML = "<p>Gagal memuat data traffic.</p>";
+    return;
+  }
+  const { summary } = await res.json();
+  if (!summary?.length) {
+    trafficCards.innerHTML = "<p>Belum ada target dengan URL terisi.</p>";
+    return;
+  }
+  for (const s of summary) {
+    const card = document.createElement("div");
+    card.className = "analytics-card";
+    const h3 = document.createElement("h3");
+    h3.textContent = s.name;
+    card.appendChild(h3);
+
+    const statLine = document.createElement("p");
+    statLine.innerHTML = `<strong>${s.pageviews}</strong> pageview &middot; <strong>${s.unique_visitors}</strong> visitor unik (perkiraan)`;
+    card.appendChild(statLine);
+
+    card.appendChild(miniList("Halaman Terpopuler", s.top_paths));
+    card.appendChild(miniList("Sumber (Referrer)", s.top_referrers));
+    card.appendChild(miniList("Device", s.device_breakdown));
+    card.appendChild(miniList("Negara", s.country_breakdown));
+
+    trafficCards.appendChild(card);
+  }
+}
+
 async function showMonitoring() {
   showView("monitoring");
-  await Promise.all([loadUptimeSummary(), loadSecuritySummary()]);
+  await Promise.all([loadUptimeSummary(), loadSecuritySummary(), loadTrafficSummary()]);
 }
 
 document.getElementById("refreshMonitoring")?.addEventListener("click", showMonitoring);

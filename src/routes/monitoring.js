@@ -94,6 +94,51 @@ router.get("/uptime/summary", async (req, res) => {
   res.json(summary);
 });
 
+// Ringkasan traffic per target: total pageview, unique visitor (perkiraan),
+// halaman terpopuler, breakdown referrer/device/negara, dalam N hari terakhir.
+router.get("/traffic/summary", async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 30);
+  const { data: targets, error: targetsError } = await supabase
+    .from("monitor_targets")
+    .select("id, name")
+    .not("url", "is", null);
+  if (targetsError) return res.status(400).json({ error: targetsError.message });
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data: views, error: viewsError } = await supabase
+    .from("monitor_pageviews")
+    .select("target_id, path, referrer, device_type, country, visitor_hash, created_at")
+    .gte("created_at", since);
+  if (viewsError) return res.status(400).json({ error: viewsError.message });
+
+  function topEntries(rows, key, limit = 5) {
+    const counts = new Map();
+    for (const r of rows) {
+      const k = r[key] || "(langsung/tidak diketahui)";
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([value, count]) => ({ value, count }));
+  }
+
+  const summary = (targets || []).map((t) => {
+    const rows = (views || []).filter((v) => v.target_id === t.id);
+    return {
+      target_id: t.id,
+      name: t.name,
+      pageviews: rows.length,
+      unique_visitors: new Set(rows.map((r) => r.visitor_hash).filter(Boolean)).size,
+      top_paths: topEntries(rows, "path"),
+      top_referrers: topEntries(rows, "referrer"),
+      device_breakdown: topEntries(rows, "device_type"),
+      country_breakdown: topEntries(rows, "country"),
+    };
+  });
+  res.json({ days, summary });
+});
+
 // Ringkasan keamanan per target: temuan open terbaru + jumlah per severity.
 router.get("/security/summary", async (req, res) => {
   const { data: targets, error: targetsError } = await supabase
@@ -190,4 +235,60 @@ ingestRouter.post("/security/ingest", async (req, res) => {
 
   logger.info({ repo_full_name, count: rows.length }, "monitoring.security_ingested");
   res.json({ ok: true, ingested: rows.length });
+});
+
+// Ping traffic publik: dipanggil langsung dari browser pengunjung tiap 4 web
+// yang dipasangi beacon (lihat public/pageview-beacon.js). Sengaja TANPA
+// token — datang dari browser sembarang orang, bukan skrip tepercaya — jadi
+// diperlakukan sebagai analytics best-effort (bisa dipalsukan pengunjung usil),
+// bukan data yang sensitif/butuh integritas tinggi. Dibatasi rate-limit di
+// server.js dan divalidasi terhadap daftar target yang memang terdaftar.
+export const pageviewRouter = express.Router();
+
+const DEVICE_PATTERNS = [
+  { type: "tablet", re: /iPad|Tablet|Nexus 7|Nexus 10/i },
+  { type: "mobile", re: /Mobi|Android|iPhone|iPod|Windows Phone/i },
+];
+
+function detectDeviceType(userAgent) {
+  const ua = String(userAgent || "");
+  for (const { type, re } of DEVICE_PATTERNS) if (re.test(ua)) return type;
+  return ua ? "desktop" : "unknown";
+}
+
+function hashVisitor(ip, userAgent) {
+  // Salt harian: cukup untuk hitung "unique visitor per hari" tanpa
+  // menyimpan IP mentah atau bisa dilacak lintas hari.
+  const daySalt = new Date().toISOString().slice(0, 10);
+  return crypto.createHash("sha256").update(`${daySalt}|${ip}|${userAgent}`).digest("hex").slice(0, 32);
+}
+
+pageviewRouter.post("/pageview", async (req, res) => {
+  const { site, path, referrer } = req.body || {};
+  if (typeof site !== "string" || !site.trim()) return res.status(400).json({ error: "site wajib diisi" });
+  if (typeof path !== "string" || path.length > 500) return res.status(400).json({ error: "path tidak valid" });
+
+  const { data: target, error: targetError } = await supabase
+    .from("monitor_targets")
+    .select("id")
+    .eq("name", site.trim())
+    .maybeSingle();
+  if (targetError) return res.status(400).json({ error: targetError.message });
+  if (!target) return res.status(404).json({ error: `Target '${site}' tidak terdaftar` });
+
+  const ip = req.ip || req.socket?.remoteAddress || "";
+  const userAgent = req.header("user-agent") || "";
+  const country = req.header("cf-ipcountry") || req.header("x-vercel-ip-country") || null;
+
+  const { error: insertError } = await supabase.from("monitor_pageviews").insert({
+    target_id: target.id,
+    path: path.slice(0, 500),
+    referrer: typeof referrer === "string" ? referrer.slice(0, 500) : null,
+    device_type: detectDeviceType(userAgent),
+    country,
+    visitor_hash: hashVisitor(ip, userAgent),
+  });
+  if (insertError) return res.status(400).json({ error: insertError.message });
+
+  res.status(204).end();
 });
