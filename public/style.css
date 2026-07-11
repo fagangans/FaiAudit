@@ -169,6 +169,14 @@ body {
   padding: 16px 26px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  /* Konten body panjang (mis. tabel Monitoring/Traffic) bikin header ikut
+     ke-scroll ke atas dan tombolnya "hilang" dari pandangan — root cause dari
+     kebingungan "tombol Kelola Target tidak muncul" padahal cuma ketutup
+     scroll. Sticky di semua .content-header (bukan cuma Monitoring) supaya
+     konsisten di semua halaman (Dashboard/Kanban/dst juga sama-sama panjang). */
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 .content-title { font-size: var(--fs-lg); font-weight: 700; color: var(--navy-900); }
 .content-header .spacer { flex: 1; }
