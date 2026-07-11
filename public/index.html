@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=28" />
+  <link rel="stylesheet" href="style.css?v=29" />
 </head>
 <body>
   <section id="authView" class="auth-page">
@@ -254,66 +254,79 @@
         <div class="content-header">
           <span class="content-title">Monitoring Web Fagan</span>
           <div class="spacer"></div>
-          <button type="button" id="goToTargets" class="btn">Kelola Target</button>
-          <button type="button" id="refreshMonitoring" class="btn">Muat Ulang</button>
+          <button type="button" id="goToTargets" class="mon-btn">Kelola Target</button>
+          <button type="button" id="refreshMonitoring" class="mon-btn">Muat Ulang</button>
         </div>
         <div class="content-body">
-          <div class="settings-panel">
-            <h2>Status Uptime (24 jam terakhir)</h2>
+          <div class="mon-kpi-row" id="monKpiRow"></div>
+
+          <div class="mon-panel">
+            <div class="mon-panel-head">
+              <h2 class="mon-panel-title">Status per Web</h2>
+              <span class="mon-panel-spacer"></span>
+              <span class="mon-panel-hint">Risiko = temuan OWASP terbuka, bukan status uptime</span>
+            </div>
             <div class="table-wrap">
-              <table id="uptimeTable">
+              <table class="mon-table">
                 <thead>
-                  <tr><th>Web</th><th>Status</th><th>Response</th><th>Uptime 24h</th><th>Dicek Terakhir</th></tr>
+                  <tr><th>Web</th><th>Status</th><th>Uptime 24h</th><th>Response</th><th>Risiko</th><th>Pageview 7h</th></tr>
                 </thead>
-                <tbody id="uptimeTableBody"></tbody>
+                <tbody id="statusTableBody"></tbody>
               </table>
             </div>
           </div>
 
-          <div class="settings-panel">
-            <h2>Traffic 7 Hari Terakhir</h2>
-            <p class="hint">Perlu snippet <code>pageview-beacon.js</code> terpasang di web-nya dulu supaya datanya masuk. Cuma web yang punya halaman (bukan API/bot) yang relevan diukur di sini.</p>
-            <div id="trafficCards" class="analytics-grid"></div>
-          </div>
+          <div class="mon-two-col">
+            <div class="mon-panel">
+              <div class="mon-panel-head">
+                <h2 class="mon-panel-title">Temuan Keamanan Terbuka</h2>
+                <span class="mon-panel-spacer"></span>
+                <span class="mon-panel-hint">audit OWASP terjadwal</span>
+              </div>
+              <div id="findingsPanelBody"></div>
+            </div>
 
-          <div class="settings-panel">
-            <h2>Status Keamanan (OWASP Top 10)</h2>
-            <p class="hint">Diperbarui otomatis oleh audit terjadwal. Klik nama web untuk lihat detail temuan.</p>
-            <div class="table-wrap">
-              <table id="securityTable">
-                <thead>
-                  <tr><th>Web</th><th>Risiko</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th></tr>
-                </thead>
-                <tbody id="securityTableBody"></tbody>
-              </table>
+            <div class="mon-panel">
+              <div class="mon-panel-head">
+                <h2 class="mon-panel-title">Referrer Teratas</h2>
+                <span class="mon-panel-spacer"></span>
+                <span class="mon-panel-hint">7 hari, semua web publik</span>
+              </div>
+              <div id="referrerPanelBody"></div>
             </div>
           </div>
-
         </div>
       </div>
 
       <div id="targetsView" class="view-panel" hidden>
         <div class="content-header">
-          <button type="button" id="backToMonitoring" class="btn" title="Kembali ke Monitoring">&larr; Monitoring</button>
+          <button type="button" id="backToMonitoring" class="mon-btn" title="Kembali ke Monitoring">&larr; Monitoring</button>
           <span class="content-title">Kelola Target Web</span>
           <div class="spacer"></div>
         </div>
         <div class="content-body">
-          <div class="settings-panel">
-            <h2>Tambah Target Baru</h2>
-            <p class="hint">Kalau nama sudah ada di daftar di bawah, gunakan nama yang persis sama supaya URL-nya ter-update, bukan bikin baris baru.</p>
-            <form id="monitorTargetForm">
-              <input id="monitorTargetName" placeholder="Nama web" required />
-              <input id="monitorTargetUrl" type="url" placeholder="https://domain-webnya.com" required />
-              <button type="submit">Simpan Target</button>
-            </form>
-            <p id="monitorTargetError" class="error"></p>
+          <div class="mon-panel">
+            <div class="mon-panel-head">
+              <h2 class="mon-panel-title">Tambah Target Baru</h2>
+              <span class="mon-panel-spacer"></span>
+              <span class="mon-panel-hint">nama sama = URL ter-update, bukan baris baru</span>
+            </div>
+            <div class="mon-panel-body">
+              <form id="monitorTargetForm" class="mon-form">
+                <input id="monitorTargetName" placeholder="Nama web" required />
+                <input id="monitorTargetUrl" type="url" placeholder="https://domain-webnya.com" required />
+                <button type="submit">Simpan Target</button>
+              </form>
+              <p id="monitorTargetError" class="error"></p>
+            </div>
           </div>
 
-          <div class="settings-panel">
-            <h2>Daftar Target</h2>
+          <div class="mon-panel">
+            <div class="mon-panel-head">
+              <h2 class="mon-panel-title">Daftar Target</h2>
+            </div>
             <div class="table-wrap">
-              <table id="targetsTable">
+              <table class="mon-table" id="targetsTable">
                 <thead>
                   <tr><th>Nama</th><th>URL</th><th>Repo</th><th>Aktif</th><th>Terdaftar</th><th></th></tr>
                 </thead>
@@ -359,6 +372,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

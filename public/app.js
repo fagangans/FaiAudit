@@ -8,11 +8,12 @@ const monitoringView = document.getElementById("monitoringView");
 const targetsView = document.getElementById("targetsView");
 const navMonitoring = document.getElementById("navMonitoring");
 const navTargets = document.getElementById("navTargets");
-const uptimeTableBody = document.getElementById("uptimeTableBody");
-const securityTableBody = document.getElementById("securityTableBody");
+const monKpiRow = document.getElementById("monKpiRow");
+const statusTableBody = document.getElementById("statusTableBody");
+const findingsPanelBody = document.getElementById("findingsPanelBody");
+const referrerPanelBody = document.getElementById("referrerPanelBody");
 const monitorTargetForm = document.getElementById("monitorTargetForm");
 const monitorTargetError = document.getElementById("monitorTargetError");
-const trafficCards = document.getElementById("trafficCards");
 const targetsTableBody = document.getElementById("targetsTableBody");
 const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
@@ -1826,145 +1827,152 @@ function fmtDateTime(iso) {
   return new Date(iso).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
 }
 
-async function loadUptimeSummary() {
-  const res = await apiFetch("/api/admin/monitoring/uptime/summary");
-  uptimeTableBody.innerHTML = "";
-  if (!res.ok) {
-    uptimeTableBody.innerHTML = `<tr><td colspan="5">Gagal memuat status uptime.</td></tr>`;
-    return;
-  }
-  const rows = await res.json();
-  if (!rows.length) {
-    uptimeTableBody.innerHTML = `<tr><td colspan="5">Belum ada target.</td></tr>`;
-    return;
-  }
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    const statusLabel = !r.url
-      ? '<span class="badge">Belum ada URL</span>'
-      : r.latest_status === "up"
-        ? '<span class="badge badge-success">Up</span>'
-        : r.latest_status === "down"
-          ? '<span class="badge badge-danger">Down</span>'
-          : '<span class="badge">Belum dicek</span>';
-    tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
-      <td>${statusLabel}</td>
-      <td>${r.latest_response_ms != null ? r.latest_response_ms + " ms" : "-"}</td>
-      <td>${r.uptime_pct_24h != null ? r.uptime_pct_24h + "%" : "-"}</td>
-      <td>${fmtDateTime(r.latest_checked_at)}</td>
-    `;
-    uptimeTableBody.appendChild(tr);
-  }
+function monRiskChipClass(level) {
+  if (level === "critical" || level === "high") return "crit";
+  if (level === "medium") return "warn";
+  return "good";
 }
 
-async function loadSecuritySummary() {
-  const res = await apiFetch("/api/admin/monitoring/security/summary");
-  securityTableBody.innerHTML = "";
-  if (!res.ok) {
-    securityTableBody.innerHTML = `<tr><td colspan="6">Gagal memuat status keamanan.</td></tr>`;
-    return;
-  }
-  const rows = await res.json();
-  if (!rows.length) {
-    securityTableBody.innerHTML = `<tr><td colspan="6">Belum ada target.</td></tr>`;
-    return;
-  }
-  const riskBadge = { critical: "badge-danger", high: "badge-danger", medium: "badge-warning", low: "badge-success" };
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
-      <td><span class="badge ${riskBadge[r.risk_level] || ""}">${escapeHtml(r.risk_level)}</span></td>
-      <td>${r.counts.critical || 0}</td>
-      <td>${r.counts.high || 0}</td>
-      <td>${r.counts.medium || 0}</td>
-      <td>${r.counts.low || 0}</td>
-    `;
-    if (r.findings?.length) {
-      tr.style.cursor = "pointer";
-      tr.title = "Klik untuk lihat detail temuan";
-      tr.addEventListener("click", () => {
-        modalContent.innerHTML = `
-          <h2>${escapeHtml(r.name)} — Temuan Keamanan Terbuka</h2>
-          <ul class="legend-list" style="display:block">
-            ${r.findings
-              .map(
-                (f) => `<li style="margin-bottom:10px"><strong>[${escapeHtml(f.severity)}] ${escapeHtml(f.owasp_category)}</strong><br/>${escapeHtml(f.summary)}${f.file_ref ? `<br/><code>${escapeHtml(f.file_ref)}</code>` : ""}</li>`,
-              )
-              .join("")}
-          </ul>
-        `;
-        modalOverlay.hidden = false;
-      });
-    }
-    securityTableBody.appendChild(tr);
-  }
+function monUptimeBar(pct) {
+  if (pct == null) return `<span class="mon-mono" style="color:var(--mon-text-faint)">-</span>`;
+  const cls = pct >= 99 ? "" : pct >= 95 ? "warn" : "crit";
+  return `<span class="mon-bar-track"><span class="mon-bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span><span class="mon-mono">${pct}%</span>`;
 }
 
-function miniList(title, entries) {
-  const wrap = document.createElement("div");
-  const h4 = document.createElement("h4");
-  h4.textContent = title;
-  h4.style.margin = "10px 0 4px";
-  wrap.appendChild(h4);
-  const ul = document.createElement("ul");
-  ul.className = "analytics-list";
-  if (!entries?.length) {
-    const li = document.createElement("li");
-    li.textContent = "Belum ada data";
-    ul.appendChild(li);
+async function loadMonitoringOverview() {
+  monKpiRow.innerHTML = `<div class="mon-empty">Memuat...</div>`;
+  statusTableBody.innerHTML = `<tr><td colspan="6" class="mon-empty">Memuat...</td></tr>`;
+  findingsPanelBody.innerHTML = `<div class="mon-empty">Memuat...</div>`;
+  referrerPanelBody.innerHTML = `<div class="mon-empty">Memuat...</div>`;
+
+  const [uptimeRes, securityRes, trafficRes] = await Promise.all([
+    apiFetch("/api/admin/monitoring/uptime/summary"),
+    apiFetch("/api/admin/monitoring/security/summary"),
+    apiFetch("/api/admin/monitoring/traffic/summary?days=7"),
+  ]);
+
+  if (!uptimeRes.ok || !securityRes.ok || !trafficRes.ok) {
+    monKpiRow.innerHTML = `<div class="mon-empty">Gagal memuat data monitoring.</div>`;
+    statusTableBody.innerHTML = `<tr><td colspan="6" class="mon-empty">Gagal memuat.</td></tr>`;
+    findingsPanelBody.innerHTML = `<div class="mon-empty">Gagal memuat.</div>`;
+    referrerPanelBody.innerHTML = `<div class="mon-empty">Gagal memuat.</div>`;
+    return;
+  }
+
+  const uptimeRows = await uptimeRes.json();
+  const securityRows = await securityRes.json();
+  const { summary: trafficRows } = await trafficRes.json();
+
+  const securityByTarget = new Map(securityRows.map((s) => [s.target_id, s]));
+  const trafficByTarget = new Map(trafficRows.map((t) => [t.target_id, t]));
+
+  // ---- KPI row ----
+  const upCount = uptimeRows.filter((r) => r.latest_status === "up").length;
+  const downRows = uptimeRows.filter((r) => r.latest_status === "down");
+  const allFindings = securityRows.flatMap((s) => s.findings.map((f) => ({ ...f, site: s.name })));
+  const highCount = allFindings.filter((f) => f.severity === "high" || f.severity === "critical").length;
+  const medCount = allFindings.filter((f) => f.severity === "medium").length;
+  const totalPageviews = trafficRows.reduce((sum, t) => sum + t.pageviews, 0);
+
+  monKpiRow.innerHTML = `
+    <div class="mon-kpi">
+      <div class="mon-kpi-label">Web Aktif</div>
+      <div class="mon-kpi-value mon-mono">${uptimeRows.length}<span class="unit"> / ${uptimeRows.length}</span></div>
+      <div class="mon-kpi-delta plain">semua terpantau</div>
+    </div>
+    <div class="mon-kpi">
+      <div class="mon-kpi-label">Status Sekarang</div>
+      <div class="mon-kpi-value mon-mono">${upCount}<span class="unit"> up</span></div>
+      <div class="mon-kpi-delta ${downRows.length ? "crit" : "good"}">${downRows.length ? `${downRows.length} down &middot; ${escapeHtml(downRows.map((r) => r.name).join(", "))}` : "semua normal"}</div>
+    </div>
+    <div class="mon-kpi">
+      <div class="mon-kpi-label">Temuan Keamanan Terbuka</div>
+      <div class="mon-kpi-value mon-mono">${allFindings.length}</div>
+      <div class="mon-kpi-delta ${allFindings.length ? "warn" : "good"}">${allFindings.length ? `${highCount} high &middot; ${medCount} medium` : "tidak ada temuan"}</div>
+    </div>
+    <div class="mon-kpi">
+      <div class="mon-kpi-label">Traffic 7 Hari</div>
+      <div class="mon-kpi-value mon-mono">${totalPageviews.toLocaleString("id-ID")}</div>
+      <div class="mon-kpi-delta plain">pageview, ${trafficRows.length} web publik</div>
+    </div>
+  `;
+
+  // ---- Status per web (gabungan uptime + risiko + traffic) ----
+  statusTableBody.innerHTML = "";
+  if (!uptimeRows.length) {
+    statusTableBody.innerHTML = `<tr><td colspan="6" class="mon-empty">Belum ada target.</td></tr>`;
+  }
+  for (const r of uptimeRows) {
+    const sec = securityByTarget.get(r.id);
+    const traf = trafficByTarget.get(r.id);
+    const statusOk = r.latest_status === "up";
+    const statusDotCls = !r.url ? "faint" : statusOk ? "good" : "crit";
+    const statusLabel = !r.url ? "Belum ada URL" : r.latest_status === "up" ? "Up" : r.latest_status === "down" ? "Down" : "Belum dicek";
+    const riskLevel = sec?.risk_level || "low";
+    const riskCount = sec ? sec.counts.critical + sec.counts.high + sec.counts.medium + sec.counts.low : 0;
+    const riskLabel = riskCount ? `${riskCount} temuan` : "Aman";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><div class="mon-site-name">${escapeHtml(r.name)}</div><div class="mon-site-url mon-mono">${escapeHtml((r.url || "").replace(/^https?:\/\//, "") || "-")}</div></td>
+      <td><span class="mon-dot ${statusDotCls}"></span><span class="mon-status-text ${statusDotCls}">${statusLabel}</span></td>
+      <td>${monUptimeBar(r.uptime_pct_24h)}</td>
+      <td class="num mon-mono">${r.latest_response_ms != null ? r.latest_response_ms + "ms" : (r.latest_error ? "timeout" : "-")}</td>
+      <td><span class="mon-risk-chip ${monRiskChipClass(riskLevel)}">${escapeHtml(riskLabel)}</span></td>
+      <td class="num mon-mono">${traf ? traf.pageviews.toLocaleString("id-ID") : "-"}</td>
+    `;
+    statusTableBody.appendChild(tr);
+  }
+
+  // ---- Temuan keamanan (gabungan semua web, prioritas severity) ----
+  const severityRank = { critical: 4, high: 3, medium: 2, low: 1 };
+  allFindings.sort((a, b) => (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0));
+  if (!allFindings.length) {
+    findingsPanelBody.innerHTML = `<div class="mon-empty">Tidak ada temuan terbuka. 🎉</div>`;
   } else {
-    for (const e of entries) {
-      const li = document.createElement("li");
-      const labelSpan = document.createElement("span");
-      labelSpan.textContent = escapeHtml(e.value);
-      const valueSpan = document.createElement("span");
-      valueSpan.className = "analytics-value";
-      valueSpan.textContent = String(e.count);
-      li.append(labelSpan, valueSpan);
-      ul.appendChild(li);
+    findingsPanelBody.innerHTML = allFindings
+      .slice(0, 12)
+      .map(
+        (f) => `
+          <div class="mon-finding">
+            <span class="mon-sev-tag ${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span>
+            <div>
+              <div class="mon-finding-text">${escapeHtml(f.summary)}</div>
+              <div class="mon-finding-meta">${escapeHtml(f.site)}${f.file_ref ? ` &middot; <span class="mon-mono">${escapeHtml(f.file_ref)}</span>` : ""}</div>
+            </div>
+          </div>`,
+      )
+      .join("");
+  }
+
+  // ---- Referrer teratas gabungan semua web ----
+  const referrerTotals = new Map();
+  for (const t of trafficRows) {
+    for (const ref of t.top_referrers || []) {
+      referrerTotals.set(ref.value, (referrerTotals.get(ref.value) || 0) + ref.count);
     }
   }
-  wrap.appendChild(ul);
-  return wrap;
-}
-
-async function loadTrafficSummary() {
-  trafficCards.innerHTML = "";
-  const res = await apiFetch("/api/admin/monitoring/traffic/summary?days=7");
-  if (!res.ok) {
-    trafficCards.innerHTML = "<p>Gagal memuat data traffic.</p>";
-    return;
-  }
-  const { summary } = await res.json();
-  if (!summary?.length) {
-    trafficCards.innerHTML = "<p>Belum ada target dengan URL terisi.</p>";
-    return;
-  }
-  for (const s of summary) {
-    const card = document.createElement("div");
-    card.className = "analytics-card";
-    const h3 = document.createElement("h3");
-    h3.textContent = s.name;
-    card.appendChild(h3);
-
-    const statLine = document.createElement("p");
-    statLine.innerHTML = `<strong>${s.pageviews}</strong> pageview &middot; <strong>${s.unique_visitors}</strong> visitor unik (perkiraan)`;
-    card.appendChild(statLine);
-
-    card.appendChild(miniList("Halaman Terpopuler", s.top_paths));
-    card.appendChild(miniList("Sumber (Referrer)", s.top_referrers));
-    card.appendChild(miniList("Device", s.device_breakdown));
-    card.appendChild(miniList("Negara", s.country_breakdown));
-
-    trafficCards.appendChild(card);
+  const topReferrers = [...referrerTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (!topReferrers.length) {
+    referrerPanelBody.innerHTML = `<div class="mon-empty">Belum ada data traffic.</div>`;
+  } else {
+    const max = Math.max(1, ...topReferrers.map(([, count]) => count));
+    referrerPanelBody.innerHTML = topReferrers
+      .map(
+        ([value, count]) => `
+          <div class="mon-finding" style="align-items:center">
+            <span class="mon-bar-track" style="margin-right:0"><span class="mon-bar-fill" style="width:${Math.round((count / max) * 100)}%"></span></span>
+            <div style="flex:1">${escapeHtml(value)}</div>
+            <span class="mon-mono">${count.toLocaleString("id-ID")}</span>
+          </div>`,
+      )
+      .join("");
   }
 }
 
 async function showMonitoring() {
   showView("monitoring");
-  await Promise.all([loadUptimeSummary(), loadSecuritySummary(), loadTrafficSummary()]);
+  await loadMonitoringOverview();
 }
 
 document.getElementById("refreshMonitoring")?.addEventListener("click", showMonitoring);
@@ -1995,6 +2003,7 @@ async function loadTargetsTable() {
     urlInput.type = "url";
     urlInput.value = t.url || "";
     urlInput.placeholder = "https://domain-webnya.com";
+    urlInput.style.cssText = "width:100%;min-width:220px;padding:6px 9px;border-radius:6px;border:1px solid var(--mon-border-strong);font-size:12.5px;";
     urlTd.appendChild(urlInput);
 
     const repoTd = document.createElement("td");
@@ -2013,8 +2022,11 @@ async function loadTargetsTable() {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.textContent = "Simpan";
+    saveBtn.className = "mon-btn";
     const status = document.createElement("span");
     status.style.marginLeft = "8px";
+    status.style.fontSize = "11.5px";
+    status.style.color = "var(--mon-text-faint)";
     actionTd.append(saveBtn, status);
 
     saveBtn.addEventListener("click", async () => {
