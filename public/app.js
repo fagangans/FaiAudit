@@ -7,6 +7,7 @@ const analyticsView = document.getElementById("analyticsView");
 const monitoringView = document.getElementById("monitoringView");
 const targetsView = document.getElementById("targetsView");
 const navMonitoring = document.getElementById("navMonitoring");
+const navTargets = document.getElementById("navTargets");
 const uptimeTableBody = document.getElementById("uptimeTableBody");
 const securityTableBody = document.getElementById("securityTableBody");
 const monitorTargetForm = document.getElementById("monitorTargetForm");
@@ -135,6 +136,7 @@ async function goToView(view) {
   if (view === "kanban") return showKanban();
   if (view === "analytics") return showAnalytics();
   if (view === "monitoring") return showMonitoring();
+  if (view === "targets") return showTargets();
 }
 
 async function showApp() {
@@ -205,6 +207,7 @@ async function loadMe() {
   const me = await res.json();
   clientPanel.hidden = !me.is_master;
   navMonitoring.hidden = !me.is_master;
+  navTargets.hidden = !me.is_master;
 }
 
 authForm.addEventListener("submit", async (event) => {
@@ -1786,6 +1789,7 @@ async function restoreSession() {
   const me = await res.json();
   clientPanel.hidden = !me.is_master;
   navMonitoring.hidden = !me.is_master;
+  navTargets.hidden = !me.is_master;
 
   const lastView = localStorage.getItem("faiaudit_view");
   if (lastView === "settings") {

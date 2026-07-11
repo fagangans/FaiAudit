@@ -107,6 +107,8 @@ body {
   transition: background 0.12s, color 0.12s;
 }
 .main-nav .nav-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-light); }
+.main-nav .nav-sublink { padding-left: 30px; font-size: var(--fs-xs, 12px); }
+.shell.sidebar-collapsed .nav-sublink { display: none; }
 .main-nav .nav-link.active {
   background: rgba(217, 119, 6, 0.16);
   border-left-color: var(--accent);
