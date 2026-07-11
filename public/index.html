@@ -250,6 +250,7 @@
         <div class="content-header">
           <span class="content-title">Monitoring Web Fagan</span>
           <div class="spacer"></div>
+          <button type="button" id="goToTargets" class="btn">Kelola Target</button>
           <button type="button" id="refreshMonitoring" class="btn">Muat Ulang</button>
         </div>
         <div class="content-body">
@@ -280,15 +281,35 @@
             </table>
           </div>
 
-          <div class="settings-panel" id="monitorTargetPanel">
-            <h2>Tambah / Kelola Target</h2>
+        </div>
+      </div>
+
+      <div id="targetsView" class="view-panel" hidden>
+        <div class="content-header">
+          <button type="button" id="backToMonitoring" class="btn" title="Kembali ke Monitoring">&larr; Monitoring</button>
+          <span class="content-title">Kelola Target Web</span>
+          <div class="spacer"></div>
+        </div>
+        <div class="content-body">
+          <div class="settings-panel">
+            <h2>Tambah Target Baru</h2>
+            <p class="hint">Kalau nama sudah ada di daftar di bawah, gunakan nama yang persis sama supaya URL-nya ter-update, bukan bikin baris baru.</p>
             <form id="monitorTargetForm">
               <input id="monitorTargetName" placeholder="Nama web" required />
               <input id="monitorTargetUrl" type="url" placeholder="https://domain-webnya.com" required />
               <button type="submit">Simpan Target</button>
             </form>
             <p id="monitorTargetError" class="error"></p>
-            <p class="hint">Kalau nama sudah ada di daftar di atas (dari 8 project awal), gunakan nama yang persis sama supaya URL-nya ter-update, bukan bikin baris baru.</p>
+          </div>
+
+          <div class="settings-panel">
+            <h2>Daftar Target</h2>
+            <table id="targetsTable">
+              <thead>
+                <tr><th>Nama</th><th>URL</th><th>Repo</th><th>Aktif</th><th>Terdaftar</th><th></th></tr>
+              </thead>
+              <tbody id="targetsTableBody"></tbody>
+            </table>
           </div>
         </div>
       </div>

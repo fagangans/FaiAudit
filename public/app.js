@@ -5,12 +5,14 @@ const settingsView = document.getElementById("settingsView");
 const kanbanView = document.getElementById("kanbanView");
 const analyticsView = document.getElementById("analyticsView");
 const monitoringView = document.getElementById("monitoringView");
+const targetsView = document.getElementById("targetsView");
 const navMonitoring = document.getElementById("navMonitoring");
 const uptimeTableBody = document.getElementById("uptimeTableBody");
 const securityTableBody = document.getElementById("securityTableBody");
 const monitorTargetForm = document.getElementById("monitorTargetForm");
 const monitorTargetError = document.getElementById("monitorTargetError");
 const trafficCards = document.getElementById("trafficCards");
+const targetsTableBody = document.getElementById("targetsTableBody");
 const staffTableBody = document.getElementById("staffTableBody");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
@@ -111,9 +113,10 @@ function showView(view) {
   kanbanView.hidden = view !== "kanban";
   analyticsView.hidden = view !== "analytics";
   monitoringView.hidden = view !== "monitoring";
+  targetsView.hidden = view !== "targets";
   // Ingat halaman terakhir supaya reload (Ctrl+R) / restart server tidak
   // melempar user kembali ke dashboard. Layar auth tidak disimpan.
-  if (["app", "sales", "settings", "kanban", "analytics", "monitoring"].includes(view)) {
+  if (["app", "sales", "settings", "kanban", "analytics", "monitoring", "targets"].includes(view)) {
     localStorage.setItem("faiaudit_view", view);
   }
   document.querySelectorAll(".nav-link").forEach((btn) => {
@@ -1800,6 +1803,8 @@ async function restoreSession() {
     await loadAnalytics();
   } else if (lastView === "monitoring" && me.is_master) {
     await showMonitoring();
+  } else if (lastView === "targets" && me.is_master) {
+    await showTargets();
   } else {
     showView("app");
     await loadDashboard();
@@ -1960,6 +1965,79 @@ async function showMonitoring() {
 
 document.getElementById("refreshMonitoring")?.addEventListener("click", showMonitoring);
 
+document.getElementById("goToTargets")?.addEventListener("click", showTargets);
+document.getElementById("backToMonitoring")?.addEventListener("click", showMonitoring);
+
+async function loadTargetsTable() {
+  const res = await apiFetch("/api/admin/monitoring/targets");
+  targetsTableBody.innerHTML = "";
+  if (!res.ok) {
+    targetsTableBody.innerHTML = `<tr><td colspan="6">Gagal memuat daftar target.</td></tr>`;
+    return;
+  }
+  const rows = await res.json();
+  if (!rows.length) {
+    targetsTableBody.innerHTML = `<tr><td colspan="6">Belum ada target.</td></tr>`;
+    return;
+  }
+  for (const t of rows) {
+    const tr = document.createElement("tr");
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = t.name;
+
+    const urlTd = document.createElement("td");
+    const urlInput = document.createElement("input");
+    urlInput.type = "url";
+    urlInput.value = t.url || "";
+    urlInput.placeholder = "https://domain-webnya.com";
+    urlTd.appendChild(urlInput);
+
+    const repoTd = document.createElement("td");
+    repoTd.textContent = t.repo_full_name || "-";
+
+    const activeTd = document.createElement("td");
+    const activeCheckbox = document.createElement("input");
+    activeCheckbox.type = "checkbox";
+    activeCheckbox.checked = t.is_active;
+    activeTd.appendChild(activeCheckbox);
+
+    const createdTd = document.createElement("td");
+    createdTd.textContent = fmtDateTime(t.created_at);
+
+    const actionTd = document.createElement("td");
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "Simpan";
+    const status = document.createElement("span");
+    status.style.marginLeft = "8px";
+    actionTd.append(saveBtn, status);
+
+    saveBtn.addEventListener("click", async () => {
+      status.textContent = "Menyimpan...";
+      const patchRes = await apiFetch(`/api/admin/monitoring/targets/${t.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ url: urlInput.value.trim(), is_active: activeCheckbox.checked }),
+      });
+      if (!patchRes.ok) {
+        const body = await patchRes.json().catch(() => ({}));
+        status.textContent = body.error || "Gagal.";
+        return;
+      }
+      status.textContent = "Tersimpan.";
+      setTimeout(() => (status.textContent = ""), 2000);
+    });
+
+    tr.append(nameTd, urlTd, repoTd, activeTd, createdTd, actionTd);
+    targetsTableBody.appendChild(tr);
+  }
+}
+
+async function showTargets() {
+  showView("targets");
+  await loadTargetsTable();
+}
+
 monitorTargetForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   monitorTargetError.textContent = "";
@@ -1975,7 +2053,7 @@ monitorTargetForm?.addEventListener("submit", async (event) => {
     return;
   }
   monitorTargetForm.reset();
-  await loadUptimeSummary();
+  await loadTargetsTable();
 });
 
 // ---- Sidebar collapse/expand (redesain: rail ikon saat ditutup) ----
