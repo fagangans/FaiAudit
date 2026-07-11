@@ -45,11 +45,12 @@ router.post("/targets", async (req, res) => {
 });
 
 router.patch("/targets/:id", async (req, res) => {
-  const { is_active, url, name } = req.body || {};
+  const { is_active, url, name, repo_full_name } = req.body || {};
   const patch = {};
   if (typeof is_active === "boolean") patch.is_active = is_active;
   if (typeof url === "string" && /^https?:\/\//.test(url)) patch.url = url.trim();
   if (typeof name === "string" && name.trim()) patch.name = name.trim();
+  if (typeof repo_full_name === "string") patch.repo_full_name = repo_full_name.trim() || null;
   if (!Object.keys(patch).length) return res.status(400).json({ error: "Tidak ada field valid untuk diubah" });
 
   const { data, error } = await supabase

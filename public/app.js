@@ -2007,7 +2007,12 @@ async function loadTargetsTable() {
     urlTd.appendChild(urlInput);
 
     const repoTd = document.createElement("td");
-    repoTd.textContent = t.repo_full_name || "-";
+    const repoInput = document.createElement("input");
+    repoInput.type = "text";
+    repoInput.value = t.repo_full_name || "";
+    repoInput.placeholder = "owner/nama-repo";
+    repoInput.style.cssText = "width:100%;min-width:170px;padding:6px 9px;border-radius:6px;border:1px solid var(--mon-border-strong);font-size:12.5px;";
+    repoTd.appendChild(repoInput);
 
     const activeTd = document.createElement("td");
     const activeCheckbox = document.createElement("input");
@@ -2033,7 +2038,7 @@ async function loadTargetsTable() {
       status.textContent = "Menyimpan...";
       const patchRes = await apiFetch(`/api/admin/monitoring/targets/${t.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ url: urlInput.value.trim(), is_active: activeCheckbox.checked }),
+        body: JSON.stringify({ url: urlInput.value.trim(), is_active: activeCheckbox.checked, repo_full_name: repoInput.value.trim() }),
       });
       if (!patchRes.ok) {
         const body = await patchRes.json().catch(() => ({}));
@@ -2059,9 +2064,10 @@ monitorTargetForm?.addEventListener("submit", async (event) => {
   monitorTargetError.textContent = "";
   const name = document.getElementById("monitorTargetName").value.trim();
   const url = document.getElementById("monitorTargetUrl").value.trim();
+  const repo_full_name = document.getElementById("monitorTargetRepo").value.trim();
   const res = await apiFetch("/api/admin/monitoring/targets", {
     method: "POST",
-    body: JSON.stringify({ name, url }),
+    body: JSON.stringify({ name, url, repo_full_name: repo_full_name || undefined }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FaiAudit — Dashboard Audit Sales</title>
-  <link rel="stylesheet" href="style.css?v=29" />
+  <link rel="stylesheet" href="style.css?v=30" />
 </head>
 <body>
   <section id="authView" class="auth-page">
@@ -315,8 +315,10 @@
               <form id="monitorTargetForm" class="mon-form">
                 <input id="monitorTargetName" placeholder="Nama web" required />
                 <input id="monitorTargetUrl" type="url" placeholder="https://domain-webnya.com" required />
+                <input id="monitorTargetRepo" placeholder="Repo GitHub (owner/nama, opsional)" />
                 <button type="submit">Simpan Target</button>
               </form>
+              <p class="hint">Isi "Repo GitHub" kalau mau audit keamanan mingguan otomatis aktif untuk web ini — lihat panduan self-service audit di bawah.</p>
               <p id="monitorTargetError" class="error"></p>
             </div>
           </div>
@@ -372,6 +374,6 @@
     </ul>
   </aside>
 
-  <script src="app.js?v=29"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>

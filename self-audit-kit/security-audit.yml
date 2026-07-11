@@ -1,0 +1,27 @@
+name: Weekly security self-audit
+
+on:
+  schedule:
+    # Setiap Senin jam 03:00 UTC (~10:00 WIB). Ubah sesuai selera.
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {} # supaya bisa dipicu manual dari tab Actions -> "Run workflow"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies (untuk npm audit)
+        run: npm install --package-lock-only --no-audit --no-fund || true
+
+      - name: Run self-audit dan kirim ke dashboard FaiAudit
+        env:
+          MONITOR_INGEST_URL: ${{ secrets.MONITOR_INGEST_URL }}
+          MONITOR_INGEST_TOKEN: ${{ secrets.MONITOR_INGEST_TOKEN }}
+          MONITOR_REPO_FULL_NAME: ${{ github.repository }}
+        run: node self-audit-kit/audit-and-report.mjs
