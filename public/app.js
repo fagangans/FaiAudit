@@ -2024,15 +2024,36 @@ async function loadTargetsTable() {
     createdTd.textContent = fmtDateTime(t.created_at);
 
     const actionTd = document.createElement("td");
+    actionTd.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;";
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.textContent = "Simpan";
     saveBtn.className = "mon-btn";
+    const activateBtn = document.createElement("button");
+    activateBtn.type = "button";
+    activateBtn.textContent = "Aktifkan Audit Mandiri";
+    activateBtn.className = "mon-btn";
+    activateBtn.title = "Pasang self-audit-kit (file + secret) ke repo GitHub-nya lewat GitHub API";
     const status = document.createElement("span");
-    status.style.marginLeft = "8px";
     status.style.fontSize = "11.5px";
     status.style.color = "var(--mon-text-faint)";
-    actionTd.append(saveBtn, status);
+    actionTd.append(saveBtn, activateBtn, status);
+
+    activateBtn.addEventListener("click", async () => {
+      if (!repoInput.value.trim()) {
+        status.textContent = "Isi & simpan kolom Repo GitHub dulu.";
+        return;
+      }
+      status.textContent = "Memasang ke repo...";
+      const actRes = await apiFetch(`/api/admin/monitoring/targets/${t.id}/activate-audit`, { method: "POST" });
+      if (!actRes.ok) {
+        const body = await actRes.json().catch(() => ({}));
+        status.textContent = body.error || "Gagal mengaktifkan.";
+        return;
+      }
+      status.textContent = "Aktif — cek tab Actions repo-nya.";
+      setTimeout(() => (status.textContent = ""), 4000);
+    });
 
     saveBtn.addEventListener("click", async () => {
       status.textContent = "Menyimpan...";

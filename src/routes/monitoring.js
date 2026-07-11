@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { supabase } from "../supabase.js";
 import { requireOwner } from "../middleware/requireOwner.js";
 import { logger } from "../logger.js";
+import { activateSelfAudit } from "../monitoring/githubActivate.js";
 
 export const router = express.Router();
 
@@ -62,6 +63,36 @@ router.patch("/targets/:id", async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   logger.info({ actor: req.owner.id, target: data.id, patch }, "monitoring.target_updated");
   res.json(data);
+});
+
+// Memasang self-audit-kit (file + secrets) ke repo GitHub target lewat
+// GitHub API, supaya master tidak perlu clone/edit repo itu manual — cukup
+// klik tombol "Aktifkan Audit Mandiri" di halaman Kelola Target. Butuh
+// GITHUB_PAT (fine-grained, scope ke repo yang relevan) di env server.
+router.post("/targets/:id/activate-audit", async (req, res) => {
+  const { data: target, error: targetError } = await supabase
+    .from("monitor_targets")
+    .select("id, name, repo_full_name")
+    .eq("id", req.params.id)
+    .single();
+  if (targetError || !target) return res.status(404).json({ error: "Target tidak ditemukan" });
+  if (!target.repo_full_name) return res.status(400).json({ error: "Isi kolom Repo GitHub dulu sebelum aktifkan audit mandiri" });
+
+  const ingestUrl = process.env.MONITOR_INGEST_URL;
+  const ingestToken = process.env.MONITOR_INGEST_TOKEN;
+  if (!ingestUrl || !ingestToken) {
+    return res.status(503).json({ error: "MONITOR_INGEST_URL / MONITOR_INGEST_TOKEN belum dikonfigurasi di server" });
+  }
+
+  try {
+    await activateSelfAudit(target.repo_full_name, ingestUrl, ingestToken);
+  } catch (err) {
+    logger.error({ actor: req.owner.id, target: target.id, err: err.message }, "monitoring.activate_audit_failed");
+    return res.status(400).json({ error: err.message });
+  }
+
+  logger.info({ actor: req.owner.id, target: target.id, repo: target.repo_full_name }, "monitoring.activate_audit_success");
+  res.json({ ok: true });
 });
 
 // Ringkasan uptime per target: status terakhir + persentase up dalam 24 jam terakhir.
